@@ -5,7 +5,7 @@ const characters = {
             id: 1,
             name: "Homem-Aranha",
             universe: "marvel",
-            image: "../imgs/SpiderMan.jpg",
+            image: "./imgs/SpiderMan.jpg",
             strength: 85,
             intelligence: 95,
             speed: 90,
@@ -382,4 +382,5 @@ const characters = {
     ]
 
 };
+
 
