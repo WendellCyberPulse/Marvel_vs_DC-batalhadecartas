@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marvel/ DC - Batalha Estratégica</title>
+    <link rel="stylesheet" href="/css/Style.css">
+</head>
+<body>
+    <header>
+        <h1>MARVEL / DC</h1>
+        <p class="subtitle">Batalha Estratégica por Turnos</p>
+    </header>
+
+    <div class="game-container">
+        <div class="game-info">
+            <div class="game-stats">
+                <div class="score">Pontuação: <span id="score-value">0</span></div>
+                <div class="turn-counter">Turno: <span id="turn-value">1</span>/4</div>
+                <div class="player-turn" id="player-turn">
+                    Dificuldade: Iniciante
+                </div>
+            </div>
+            <div class="controls">
+                <!-- ADICIONE ESTE SELECT DE DIFICULDADE -->
+                <div class="difficulty-select">
+                    <label for="difficulty">Dificuldade:</label>
+                    <select id="difficulty-select">
+                        <option value="1">Iniciante</option>
+                        <option value="2">Intermediário</option>
+                        <option value="3">Avançado</option>
+                        <option value="4">Especialista</option>
+                        <option value="5">Lendário</option>
+                    </select>
+                </div>
+                <button id="end-turn-btn">Finalizar Turno</button>
+                <button id="battle-btn" disabled>Batalhar!</button>
+                <button id="reset-btn">Novo Jogo</button>
+            </div>
+        </div>
+
+        <!-- Área da Arena -->
+        <div class="arena-container">
+            <h2 class="arena-title" id="arena-title">Arena Central</h2>
+            <div class="arenas">
+                <div class="arena" id="arena-1" data-arena="1">
+                    <h3>Arena 1</h3>
+                    <div class="arena-cards">
+                        <div class="player-side">
+                            <div class="power-value" id="power-arena-1-player">0</div>
+                            <div class="arena-cards-container" id="arena-1-player"></div>
+                        </div>
+                        <div class="opponent-side">
+                            <div class="power-value" id="power-arena-1-opponent">0</div>
+                            <div class="arena-cards-container" id="arena-1-opponent"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="arena" id="arena-2" data-arena="2">
+                    <h3>Arena 2</h3>
+                    <div class="arena-cards">
+                        <div class="player-side">
+                            <div class="power-value" id="power-arena-2-player">0</div>
+                            <div class="arena-cards-container" id="arena-2-player"></div>
+                        </div>
+                        <div class="opponent-side">
+                            <div class="power-value" id="power-arena-2-opponent">0</div>
+                            <div class="arena-cards-container" id="arena-2-opponent"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="arena" id="arena-3" data-arena="3">
+                    <h3>Arena 3</h3>
+                    <div class="arena-cards">
+                        <div class="player-side">
+                            <div class="power-value" id="power-arena-3-player">0</div>
+                            <div class="arena-cards-container" id="arena-3-player"></div>
+                        </div>
+                        <div class="opponent-side">
+                            <div class="power-value" id="power-arena-3-opponent">0</div>
+                            <div class="arena-cards-container" id="arena-3-opponent"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Área de Mão do Jogador -->
+        <div class="hand-container">
+            <h2>Sua Mão</h2>
+            <div class="hand-cards" id="player-hand">
+                <!-- Cartas da mão do jogador -->
+            </div>
+        </div>
+
+        <!-- Decks Disponíveis -->
+        <div class="decks-container">
+            <div class="deck marvel-deck">
+                <h2 class="deck-title marvel-title">Universo Marvel</h2>
+                <div class="cards-container" id="marvel-cards">
+                    <!-- Cartas Marvel serão geradas aqui -->
+                </div>
+            </div>
+
+            <div class="deck dc-deck">
+                <h2 class="deck-title dc-title">Universo DC</h2>
+                <div class="cards-container" id="dc-cards">
+                    <!-- Cartas DC serão geradas aqui -->
+                </div>
+            </div>
+        </div>
+
+        <div id="battle-result" class="battle-result">
+            <!-- Resultado da batalha será mostrado aqui -->
+        </div>
+    </div>
+
+    <footer>
+        <p>Jogo de Cartas Marvel vs DC - Batalha Estratégica por Turnos</p>
+    </footer>
+
+    <script src="/Scripts/character.js"></script>
+    <script src="/Scripts/script.js"></script>
+    <script src="/Scripts/arenas.js"></script>
+</body>
+</html>
