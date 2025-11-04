@@ -5,7 +5,7 @@ const arenas = {
             id: 1,
             name: "Wakanda",
             universe: "marvel",
-            image: "/imgs/arenas/wakanda.jpg",
+            image: "./imgs/arenas/wakanda.jpg",
             effect: "Cartas com Força > 80 ganham +15 de poder",
             effectType: "buff_high_strength",
             description: "O reino tecnologicamente avançado do Pantera Negra"
@@ -14,7 +14,7 @@ const arenas = {
             id: 2,
             name: "Asgard",
             universe: "marvel",
-            image: "/imgs/arenas/asgard.jpg",
+            image: "./imgs/arenas/asgard.jpg",
             effect: "Cartas do universo Marvel ganham +10 de poder",
             effectType: "buff_marvel",
             description: "O reino celestial dos Deuses Nórdicos"
@@ -23,7 +23,7 @@ const arenas = {
             id: 3,
             name: "Xavier's School",
             universe: "marvel",
-            image: "/imgs/arenas/xavier_school.jpg",
+            image: "./imgs/arenas/xavier_school.jpg",
             effect: "Cartas com Inteligência > 85 ganham +12 de poder",
             effectType: "buff_high_intelligence",
             description: "A escola para jovens superdotados do Professor X"
@@ -32,7 +32,7 @@ const arenas = {
             id: 4,
             name: "Stark Tower",
             universe: "marvel",
-            image: "/imgs/arenas/stark_tower.jpg",
+            image: "./imgs/arenas/stark_tower.jpg",
             effect: "Cartas com tecnologia ganham vantagem",
             effectType: "buff_tech",
             description: "A sede dos Vingadores e casa de Tony Stark"
@@ -41,7 +41,7 @@ const arenas = {
             id: 5,
             name: "Knowhere",
             universe: "marvel",
-            image: "/imgs/arenas/knowhere.jpg",
+            image: "./imgs/arenas/knowhere.jpg",
             effect: "Todas as cartas têm seus atributos embaralhados",
             effectType: "shuffle_stats",
             description: "A colônia espacial dentro da cabeça de um Celestial"
@@ -52,7 +52,7 @@ const arenas = {
             id: 6,
             name: "Metropolis",
             universe: "dc",
-            image: "/imgs/arenas/metropolis.jpg",
+            image: "./imgs/arenas/metropolis.jpg",
             effect: "Cartas com Velocidade > 85 ganham +15 de poder",
             effectType: "buff_high_speed",
             description: "A cidade do Homem de Aço"
@@ -61,7 +61,7 @@ const arenas = {
             id: 7,
             name: "Gotham City",
             universe: "dc",
-            image: "/imgs/arenas/gotham.jpg",
+            image: "./imgs/arenas/gotham.jpg",
             effect: "Cartas do universo DC ganham +10 de poder",
             effectType: "buff_dc",
             description: "A cidade sombria protegida pelo Batman"
@@ -70,7 +70,7 @@ const arenas = {
             id: 8,
             name: "Themyscira",
             universe: "dc",
-            image: "/imgs/arenas/themyscira.jpg",
+            image: "./imgs/arenas/themyscira.jpg",
             effect: "Cartas femininas ganham +20 de poder",
             effectType: "buff_female",
             description: "A ilha paradisíaca das Amazonas"
@@ -79,7 +79,7 @@ const arenas = {
             id: 9,
             name: "Central City",
             universe: "dc",
-            image: "/imgs/arenas/central_city.jpg",
+            image: "./imgs/arenas/central_city.jpg",
             effect: "A carta com maior velocidade decide a arena",
             effectType: "speed_decides",
             description: "Casa do Flash e da Força de Aceleração"
@@ -88,7 +88,7 @@ const arenas = {
             id: 10,
             name: "Oa",
             universe: "dc",
-            image: "/imgs/arenas/oa.jpg",
+            image: "./imgs/arenas/oa.jpg",
             effect: "Cartas com Durabilidade > 80 ganham +15 de poder",
             effectType: "buff_high_durability",
             description: "O planeta central dos Guardiões do Universo"
@@ -99,7 +99,7 @@ const arenas = {
             id: 11,
             name: "Battleworld",
             universe: "neutral",
-            image: "/imgs/arenas/battleworld.jpg",
+            image: "./imgs/arenas/battleworld.jpg",
             effect: "Nenhum efeito especial - batalha pura",
             effectType: "none",
             description: "Um planeta criado para batalhas épicas entre universos"
@@ -108,7 +108,7 @@ const arenas = {
             id: 12,
             name: "Crossover Zone",
             universe: "neutral",
-            image: "/imgs/arenas/crossover_zone.jpg",
+            image: "./imgs/arenas/crossover_zone.jpg",
             effect: "Cartas raras ganham +25 de poder",
             effectType: "buff_rare",
             description: "Onde os universos se encontram e colidem"
@@ -117,7 +117,7 @@ const arenas = {
             id: 13,
             name: "Quantum Realm",
             universe: "neutral",
-            image: "/imgs/arenas/quantum_realm.jpg",
+            image: "./imgs/arenas/quantum_realm.jpg",
             effect: "Poderes são invertidos temporariamente",
             effectType: "reverse_power",
             description: "Uma dimensão onde as regras da física são diferentes"
@@ -174,4 +174,5 @@ function calculateCardPowerWithArena(card, arena) {
     const basePower = card.strength + card.intelligence + card.speed + card.durability;
     const arenaBonus = applyArenaEffect(card, arena, 'player');
     return basePower + arenaBonus;
+
 }
