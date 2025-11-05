@@ -25,7 +25,7 @@ const characters = {
             id: 3,
             name: "Capitão América",
             universe: "marvel",
-            image: "./imgs/CAp_america.jpg",
+            image: "./imgs/Cap_america.jpg",
             strength: 80,
             intelligence: 70,
             speed: 50,
@@ -382,5 +382,6 @@ const characters = {
     ]
 
 };
+
 
 
