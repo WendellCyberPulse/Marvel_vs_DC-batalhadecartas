@@ -859,9 +859,9 @@ footer {
 
 /* Destacar carta mais rápida */
 .fastest-card {
-    border: 2px solid #00ffff !important;
-    box-shadow: 0 0 15px rgba(0, 255, 255, 0.7) !important;
-    background: linear-gradient(135deg, rgba(0, 255, 255, 0.3), rgba(0, 200, 255, 0.2)) !important;
+    border: 2px solid #ff0000 !important;
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.7) !important;
+    background: linear-gradient(135deg, rgba(255, 0, 0, 0.3), rgba(0, 200, 255, 0.2)) !important;
     animation: pulse-fast 1s infinite;
 }
 
@@ -884,3 +884,4 @@ footer {
     font-weight: bold;
     z-index: 10;
 }
+
