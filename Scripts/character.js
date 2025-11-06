@@ -396,3 +396,32 @@ const characters = {
     ]
 };
 
+// No final do arquivo characters.js, adicione:
+
+// Função para obter todas as cartas
+function getAllCharacters() {
+    if (!characters || !characters.marvel || !characters.dc) {
+        console.error('❌ Dados de personagens não carregados corretamente');
+        return [];
+    }
+    return [...characters.marvel, ...characters.dc];
+}
+
+// Função para calcular poder
+function calculateCardPower(card) {
+    if (!card) return 0;
+    return (card.strength || 0) + (card.intelligence || 0) + (card.speed || 0) + (card.durability || 0);
+}
+
+// Função para embaralhar array
+function shuffleArray(array) {
+    if (!array) return [];
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+}
+
+console.log('✅ Characters.js totalmente carregado');
