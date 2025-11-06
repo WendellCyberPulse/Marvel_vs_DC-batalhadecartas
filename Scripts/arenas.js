@@ -172,8 +172,7 @@ function applyArenaEffect(card, arena, side) {
             powerBonus = shuffleCardStats(card);
             break;
         case 'speed_decides':
-            // Efeito especial: velocidade decide (implementação diferente)
-            powerBonus = 0; // Este precisa de lógica especial
+            return 0; // Sem bônus individual
             break;
         case 'reverse_power':
             // Efeito especial: inverte poder (implementação opcional)
