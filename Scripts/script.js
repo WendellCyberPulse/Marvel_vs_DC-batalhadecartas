@@ -3,68 +3,44 @@
 // =============================================
 
 // Configurações de dificuldade
-// No início do script.js - CONFIGURAÇÕES COMPLETAS
 const DIFFICULTY_SETTINGS = {
-    1: { 
-        name: "Iniciante", 
-        opponentBuff: 0, 
-        turnTime: 90,
-        description: "Bom para aprender as mecânicas",
-        deckStrategy: "balanced"
-    },
-    2: { 
-        name: "Intermediário", 
-        opponentBuff: 15, 
-        turnTime: 90,
-        description: "Oponente mais estratégico", 
-        deckStrategy: "smart"
-    },
-    3: { 
-        name: "Avançado", 
-        opponentBuff: 25, 
-        turnTime: 90,
-        description: "Desafio significativo",
-        deckStrategy: "aggressive" 
-    },
-    4: { 
-        name: "Especialista", 
-        opponentBuff: 35, 
-        turnTime: 90,
-        description: "Para mestres da estratégia",
-        deckStrategy: "elite"
-    },
-    5: { 
-        name: "Lendário", 
-        opponentBuff: 50, 
-        turnTime: 30,
-        description: "O desafio máximo",
-        deckStrategy: "ultimate"
-    }
+    1: { name: "Iniciante", opponentBuff: 0, turnTime: 90, description: "Bom para aprender as mecânicas" },
+    2: { name: "Intermediário", opponentBuff: 10, turnTime: 90, description: "Oponente mais estratégico" },
+    3: { name: "Avançado", opponentBuff: 20, turnTime: 90, description: "Desafio significativo" },
+    4: { name: "Especialista", opponentBuff: 30, turnTime: 90, description: "Para mestres da estratégia" },
+    5: { name: "Lendário", opponentBuff: 40, turnTime: 30, description: "O desafio máximo" }
 };
 
 // Estado do jogo
-// Estado do jogo COMPLETO
 const gameState = {
+    // Controle de jogo
     turn: 1,
     maxTurns: 4,
     currentPlayer: 'player',
     gameEnded: false,
+    
+    // Cartas
     playerHand: [],
     opponentHand: [],
     playerDeck: [],
     opponentDeck: [],
     selectedCardId: null,
+    
+    // Arenas
     arenas: {
         1: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null },
         2: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null },
         3: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null }
     },
+    
+    // Progressão
     score: 0,
     difficulty: 1,
     winStreak: 0,
     totalWins: 0,
     totalGames: 0,
-    opponentBuff: 0, // 🔥 IMPORTANTE: Adicionar esta linha
+    
+    // Timer
     turnTime: 90,
     timeLeft: 90,
     timerInterval: null
@@ -114,8 +90,6 @@ const elements = {
  */
 function initGame() {
     console.log('🎮 Inicializando jogo...');
-
-    gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
     
     // Verificar se os dados estão carregados
     if (typeof getAllCharacters === 'undefined') {
@@ -354,67 +328,6 @@ function resetHandCardStyles() {
         card.style.transform = '';
         card.style.cursor = '';
     });
-}
-
-function selectDeckForOpponent(cards) {
-    const sortedByPower = [...cards].sort((a, b) => {
-        return calculateCardPower(b) - calculateCardPower(a);
-    });
-    
-    const deckSize = 12;
-    let selectedCards = [];
-    
-    const strategy = DIFFICULTY_SETTINGS[gameState.difficulty].deckStrategy;
-    
-    switch (strategy) {
-        case 'balanced': // Iniciante
-            selectedCards = shuffleArray(sortedByPower).slice(0, deckSize);
-            break;
-            
-        case 'smart': // Intermediário
-            // 60% melhores cartas, 40% aleatórias
-            const goodCardsCount = Math.floor(deckSize * 0.6);
-            selectedCards = [
-                ...sortedByPower.slice(0, goodCardsCount),
-                ...shuffleArray(sortedByPower.slice(goodCardsCount)).slice(0, deckSize - goodCardsCount)
-            ];
-            break;
-            
-        case 'aggressive': // Avançado
-            // 80% melhores cartas, foco em força e velocidade
-            const strongCards = sortedByPower.filter(card => 
-                card.strength >= 80 || card.speed >= 80
-            );
-            const aggressiveCount = Math.floor(deckSize * 0.8);
-            selectedCards = [
-                ...strongCards.slice(0, aggressiveCount),
-                ...sortedByPower.slice(0, deckSize - aggressiveCount)
-            ];
-            break;
-            
-        case 'elite': // Especialista
-            // Apenas as melhores cartas, priorizando atributos altos
-            selectedCards = sortedByPower.slice(0, deckSize);
-            break;
-            
-        case 'ultimate': // Lendário
-            // Cartas elite + estratégia de composição
-            const eliteCards = sortedByPower.filter(card => 
-                calculateCardPower(card) >= 300
-            );
-            if (eliteCards.length >= deckSize) {
-                selectedCards = eliteCards.slice(0, deckSize);
-            } else {
-                selectedCards = sortedByPower.slice(0, deckSize);
-            }
-            break;
-            
-        default:
-            selectedCards = sortedByPower.slice(0, deckSize);
-    }
-    
-    console.log(`🎯 Estratégia do oponente (${strategy}): ${selectedCards.length} cartas selecionadas`);
-    return shuffleArray(selectedCards);
 }
 
 // =============================================
@@ -734,54 +647,6 @@ function continueGameAfterPlay() {
     }
 }
 
-function updateGameStats(result) {
-    const { playerWins, opponentWins } = result;
-    
-    let difficultyChanged = false;
-    let oldDifficulty = gameState.difficulty;
-    
-    if (playerWins > opponentWins) {
-        // VITÓRIA
-        gameState.winStreak++;
-        gameState.totalWins++;
-        gameState.score += 50 + (gameState.difficulty * 10);
-        
-        // 🔥 PROGRESSÃO: Aumentar dificuldade após vitórias consecutivas
-        if (gameState.winStreak >= 2 && gameState.difficulty < 5) {
-            gameState.difficulty++;
-            difficultyChanged = true;
-            console.log(`🔥 Dificuldade aumentada para: ${DIFFICULTY_SETTINGS[gameState.difficulty].name}`);
-        }
-        
-    } else if (playerWins < opponentWins) {
-        // DERROTA
-        gameState.winStreak = 0;
-        gameState.score = Math.max(0, gameState.score - 20);
-        
-        // 🔥 REGRESSÃO: Reduzir dificuldade após derrota (mas não abaixo de 1)
-        if (gameState.difficulty > 1) {
-            gameState.difficulty = Math.max(1, gameState.difficulty - 1);
-            difficultyChanged = true;
-            console.log(`🔄 Dificuldade reduzida para: ${DIFFICULTY_SETTINGS[gameState.difficulty].name}`);
-        }
-        
-    } else {
-        // EMPATE
-        gameState.winStreak = 0;
-        gameState.score += 10;
-    }
-    
-    gameState.totalGames++;
-    gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
-    
-    // Atualizar seletor de dificuldade
-    if (elements.difficultySelect) {
-        elements.difficultySelect.value = gameState.difficulty;
-    }
-    
-    return { difficultyChanged, oldDifficulty };
-}
-
 // =============================================
 // SISTEMA DE ARENAS
 // =============================================
@@ -836,8 +701,8 @@ function calculateArenaPower(arenaId, side) {
             arenaBonus = applyArenaEffect(card, arenaData.arena, side);
         }
         
-        // 🔥 BÔNUS DE DIFICULDADE PARA OPONENTE
-        const difficultyBonus = (side === 'opponent') ? gameState.opponentBuff : 0;
+        // Bônus de dificuldade para oponente
+        const difficultyBonus = (side === 'opponent') ? DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff : 0;
         
         totalPower += basePower + arenaBonus + difficultyBonus;
     });
@@ -1291,21 +1156,16 @@ function endGame() {
     const result = calculateGameResult();
     const { playerWins, opponentWins } = result;
     
-    // Atualizar estatísticas E obter info sobre mudança de dificuldade
-    const { difficultyChanged, oldDifficulty } = updateGameStats(result);
+    // Atualizar estatísticas
+    updateGameStats(result);
     
     // Mostrar resultado
-    showGameResult(result, difficultyChanged, oldDifficulty);
+    showGameResult(result);
     
     // Atualizar interface
     updateGameDisplay();
     
-    console.log('📊 Jogo finalizado - Resultado:', { 
-        playerWins, 
-        opponentWins, 
-        difficulty: gameState.difficulty,
-        winStreak: gameState.winStreak 
-    });
+    console.log('📊 Jogo finalizado - Resultado:', { playerWins, opponentWins });
 }
 
 /**
@@ -1355,7 +1215,7 @@ function updateGameStats(result) {
 /**
  * Mostra resultado do jogo
  */
-function showGameResult(result, difficultyChanged = false, oldDifficulty = null) {
+function showGameResult(result) {
     const { playerWins, opponentWins } = result;
     const difficultyInfo = DIFFICULTY_SETTINGS[gameState.difficulty];
     
@@ -1368,11 +1228,9 @@ function showGameResult(result, difficultyChanged = false, oldDifficulty = null)
         message += `📈 Sequência: ${gameState.winStreak} vitória(s) consecutiva(s)`;
         resultClass = "victory";
         
-        // 🔥 MENSAGEM DE PROGRESSÃO
-        if (difficultyChanged) {
-            message += `\n\n🔥 **Dificuldade aumentada para: ${difficultyInfo.name}**`;
-        } else if (gameState.winStreak >= 1) {
-            message += `\n\n⭐ **Mais ${2 - gameState.winStreak} vitória(s) para subir de dificuldade!**`;
+        if (gameState.winStreak >= 2 && gameState.difficulty < 5) {
+            const newDifficulty = gameState.difficulty + 1;
+            message += `\n\n🔥 **Dificuldade aumentada para: ${DIFFICULTY_SETTINGS[newDifficulty].name}**`;
         }
         
     } else if (playerWins < opponentWins) {
@@ -1382,9 +1240,9 @@ function showGameResult(result, difficultyChanged = false, oldDifficulty = null)
         message += `📊 Sequência: 0 vitória(s) consecutiva(s)`;
         resultClass = "defeat";
         
-        // 🔥 MENSAGEM DE REGRESSÃO
-        if (difficultyChanged) {
-            message += `\n\n🔄 **Dificuldade reduzida para: ${difficultyInfo.name}**`;
+        if (gameState.difficulty > 1) {
+            const newDifficulty = gameState.difficulty - 1;
+            message += `\n\n🔄 **Dificuldade reduzida para: ${DIFFICULTY_SETTINGS[newDifficulty].name}**`;
         }
         
     } else {
@@ -1398,7 +1256,7 @@ function showGameResult(result, difficultyChanged = false, oldDifficulty = null)
     message += `\n\n🎯 Dificuldade: ${difficultyInfo.name}`;
     message += `\n📊 Total: ${gameState.totalWins}/${gameState.totalGames} vitórias`;
     
-    // Mostrar resultado
+    // Mostrar resultado de forma mais destacada
     showFinalResult(message, resultClass, result);
 }
 
