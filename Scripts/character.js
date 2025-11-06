@@ -19,13 +19,14 @@ const characters = {
             strength: 85,
             intelligence: 100,
             speed: 60,
-            durability: 85
+            durability: 85,
+            attributes: "tech"
         },
         {
             id: 3,
             name: "Capitão América",
             universe: "marvel",
-            image: "./imgs/Cap_america.jpg",
+            image: "./imgs/CAp_america.jpg",
             strength: 80,
             intelligence: 70,
             speed: 50,
@@ -69,7 +70,8 @@ const characters = {
             strength: 95,
             intelligence: 80,
             speed: 85,
-            durability: 90
+            durability: 90,
+            gender: "female"
         },
         {
             id: 13,
@@ -109,7 +111,8 @@ const characters = {
             strength: 100,
             intelligence: 100,
             speed: 60,
-            durability: 50
+            durability: 50,
+            rarity: "rare"
         }, 
         
         {
@@ -150,7 +153,8 @@ const characters = {
             strength: 100,
             intelligence: 100,
             speed: 90,
-            durability: 100
+            durability: 100,
+            rarity: "rare"
         },
         {
             id: 31,
@@ -160,7 +164,8 @@ const characters = {
             strength: 80,
             intelligence: 100,
             speed: 90,
-            durability: 90
+            durability: 90,
+            gender: "female"
         },
 
         {
@@ -171,7 +176,8 @@ const characters = {
             strength: 80,
             intelligence: 100,
             speed: 90,
-            durability: 80
+            durability: 80,
+            rarity: "rare"
         },
         {
             id: 33,
@@ -181,7 +187,8 @@ const characters = {
             strength: 90,
             intelligence: 100,
             speed: 90,
-            durability: 100
+            durability: 100,
+            attributes: "tech"
         },
         {
             id: 34,
@@ -191,7 +198,8 @@ const characters = {
             strength: 90,
             intelligence: 100,
             speed: 90,
-            durability: 90
+            durability: 90,
+            attributes: "tech"
         },
     ],
 
@@ -225,7 +233,8 @@ const characters = {
             strength: 95,
             intelligence: 80,
             speed: 90,
-            durability: 95
+            durability: 95,
+            gender: "female"
         },
         {
             id: 9,
@@ -285,7 +294,8 @@ const characters = {
             strength: 90,
             intelligence: 100,
             speed: 60,
-            durability: 90
+            durability: 90,
+            attributes: "tech"
         },
         {
             id: 20,
@@ -345,7 +355,8 @@ const characters = {
             strength: 100,
             intelligence: 100,
             speed: 60,
-            durability: 100
+            durability: 100,
+            rarity: "rare"
         },
 
         {
@@ -356,7 +367,8 @@ const characters = {
             strength: 45,
             intelligence: 50,
             speed: 50,
-            durability: 20
+            durability: 20,
+            rarity: "rare"
         },
 
         {
@@ -367,7 +379,8 @@ const characters = {
             strength: 90,
             intelligence: 75,
             speed: 60,
-            durability: 90
+            durability: 90,
+            gender: "female"
         },
         {
             id: 30,
@@ -377,11 +390,8 @@ const characters = {
             strength: 90,
             intelligence: 80,
             speed: 90,
-            durability: 90
+            durability: 90,
+            rarity: "rare"
         },
     ]
-
 };
-
-
-
