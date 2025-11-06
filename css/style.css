@@ -660,7 +660,7 @@ footer {
 
 .arena-effect {
     font-size: 0.8rem;
-    color: #4CAF50;
+    color: #ffff;
     text-align: center;
     margin-bottom: 10px;
     font-style: italic;
@@ -812,3 +812,4 @@ footer {
     background: #2d3047;
     color: white;
 }
+
