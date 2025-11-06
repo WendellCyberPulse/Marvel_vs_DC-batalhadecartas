@@ -33,18 +33,18 @@ const arenas = {
             name: "Stark Tower",
             universe: "marvel",
             image: "./imgs/arenas/stark_tower.jpg",
-            effect: "Cartas com tecnologia ganham vantagem",
+            effect: "Cartas com tecnologia ganham +15 de poder",
             effectType: "buff_tech",
             description: "A sede dos Vingadores e casa de Tony Stark"
         },
         {
             id: 5,
-            name: "Knowhere",
+            name: "Sanctum Sanctorum",
             universe: "marvel",
-            image: "./imgs/arenas/knowhere.jpg",
-            effect: "Todas as cartas têm seus atributos embaralhados",
-            effectType: "shuffle_stats",
-            description: "A colônia espacial dentro da cabeça de um Celestial"
+            image: "./imgs/arenas/sanctum.jpg",
+            effect: "Cartas raras ganham +20 de poder",
+            effectType: "buff_rare",
+            description: "A residência do Dr. Estranho"
         }
     ],
     dc: [
@@ -109,8 +109,8 @@ const arenas = {
             name: "Crossover Zone",
             universe: "neutral",
             image: "./imgs/arenas/crossover_zone.jpg",
-            effect: "Cartas raras ganham +25 de poder",
-            effectType: "buff_rare",
+            effect: "Todas as cartas ganham +5 de poder",
+            effectType: "buff_all",
             description: "Onde os universos se encontram e colidem"
         },
         {
@@ -118,22 +118,24 @@ const arenas = {
             name: "Quantum Realm",
             universe: "neutral",
             image: "./imgs/arenas/quantum_realm.jpg",
-            effect: "Poderes são invertidos temporariamente",
-            effectType: "reverse_power",
+            effect: "Atributos são randomizados",
+            effectType: "shuffle_stats",
             description: "Uma dimensão onde as regras da física são diferentes"
         }
     ]
 };
 
-// Função para selecionar arenas aleatórias para uma partida
+// Função para selecionar arenas aleatórias
 function selectRandomArenas() {
     const allArenas = [...arenas.marvel, ...arenas.dc, ...arenas.neutral];
-    const shuffled = [...allArenas].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 3); // Retorna 3 arenas aleatórias
+    const shuffled = shuffleArray(allArenas);
+    return shuffled.slice(0, 3);
 }
 
-// Função para aplicar efeitos das arenas - VERSÃO CORRIGIDA
+// Função para aplicar efeitos das arenas
 function applyArenaEffect(card, arena, side) {
+    if (!card || !arena) return 0;
+    
     let powerBonus = 0;
     
     switch(arena.effectType) {
@@ -146,6 +148,12 @@ function applyArenaEffect(card, arena, side) {
         case 'buff_high_intelligence':
             if (card.intelligence > 85) powerBonus = 12;
             break;
+        case 'buff_tech':
+            if (card.attributes && card.attributes.includes('tech')) powerBonus = 15;
+            break;
+        case 'buff_rare':
+            if (card.rarity && card.rarity === 'rare') powerBonus = 20;
+            break;
         case 'buff_high_speed':
             if (card.speed > 85) powerBonus = 15;
             break;
@@ -153,44 +161,55 @@ function applyArenaEffect(card, arena, side) {
             if (card.universe === 'dc') powerBonus = 10;
             break;
         case 'buff_female':
-            // Verificar se a propriedade gender existe e é 'female'
             if (card.gender && card.gender === 'female') powerBonus = 20;
             break;
         case 'buff_high_durability':
             if (card.durability > 80) powerBonus = 15;
             break;
-        case 'buff_rare':
-            //Verificar se a propriedade rarity existe e é 'rare'
-            if (card.rarity && card.rarity === 'rare') powerBonus = 25;
-            break;
-        case 'buff_tech':
-            // Verificar se a propriedade attributes existe e contém 'tech'
-            if (card.attributes && card.attributes.includes('tech')) powerBonus = 15;
-            break;
-        case 'shuffle_stats':
-            // Efeito especial: embaralha atributos (implementação opcional)
-            powerBonus = shuffleCardStats(card);
+        case 'buff_all':
+            powerBonus = 5;
             break;
         case 'speed_decides':
-            return 0; // Sem bônus individual
+            // Efeito especial - tratado separadamente
+            return 0;
+        case 'shuffle_stats':
+            // Efeito especial - randomiza atributos
+            powerBonus = Math.floor(Math.random() * 21) - 10; // -10 a +10
             break;
-        case 'reverse_power':
-            // Efeito especial: inverte poder (implementação opcional)
-            powerBonus = -calculateCardPower(card) * 0.5; // Exemplo: reduz pela metade
+        case 'none':
+        default:
+            powerBonus = 0;
             break;
     }
     
     return powerBonus;
 }
 
-// Função para calcular poder considerando efeitos de arena
-function calculateCardPowerWithArena(card, arena) {
-    const basePower = calculateCardPower(card);
-    const arenaBonus = applyArenaEffect(card, arena, 'player');
-    return basePower + arenaBonus;
+// Função específica para arena Speed Decides
+function calculateSpeedDecidesPower(arenaData, side) {
+    const cards = arenaData[side];
+    
+    if (cards.length === 0) return 0;
+    
+    // Encontrar a carta com MAIOR velocidade
+    const fastestCard = cards.reduce((fastest, current) => {
+        return current.speed > fastest.speed ? current : fastest;
+    }, cards[0]);
+    
+    // O poder total é baseado APENAS na velocidade da carta mais rápida
+    let speedPower = fastestCard.speed * 2; // Dobra o valor da velocidade
+    
+    console.log(`🎯 Speed Decides: ${side} - ${fastestCard.name} com ${fastestCard.speed} velocidade = ${speedPower} poder`);
+    
+    return speedPower;
 }
 
-// Função auxiliar para calcular poder base (pode já existir no seu código)
-function calculateCardPower(card) {
-    return card.strength + card.intelligence + card.speed + card.durability;
+// Função para embaralhar array
+function shuffleArray(array) {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
 }
