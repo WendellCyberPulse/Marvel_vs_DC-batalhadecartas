@@ -39,6 +39,7 @@ const gameState = {
     winStreak: 0,
     totalWins: 0,
     totalGames: 0,
+    opponentBuff: 0,
     
     // Timer
     turnTime: 90,
@@ -104,12 +105,19 @@ function initGame() {
         console.error('❌ Falha ao inicializar elementos DOM');
         return;
     }
+
+    setupDifficultySelector();
     
     // Verificar elementos críticos
     if (!elements.playerHand) {
         console.error('❌ Elemento player-hand não encontrado!');
         return;
     }
+    const difficultySettings = DIFFICULTY_SETTINGS[gameState.difficulty];
+    gameState.turnTime = difficultySettings.turnTime;
+    gameState.timeLeft = difficultySettings.turnTime;
+    gameState.opponentBuff = difficultySettings.opponentBuff;
+    //gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
     
     setupEventListeners();
     setupClickOutsideHandler();
@@ -118,7 +126,7 @@ function initGame() {
     dealInitialHands();
     updateGameDisplay();
     
-    console.log('✅ Jogo inicializado!');
+    console.log('✅ Jogo inicializado! Dificuldade:', gameState.difficulty, 'Opponent Buff:', gameState.opponentBuff);
 }
 
 /**
@@ -236,9 +244,18 @@ function setupDifficultySelector() {
     elements.difficultySelect.addEventListener('change', (e) => {
         const newDifficulty = parseInt(e.target.value);
         
-        if (gameState.gameEnded || gameState.turn === 1) {
+        console.log('🎯 EVENTO CHANGE - Dificuldade selecionada:', {
+            novoValor: newDifficulty,
+            valorAntigo: gameState.difficulty,
+            elementoValue: e.target.value,
+            tipo: typeof newDifficulty
+        });
+        
+        if (gameState.gameEnded || gameState.turn === 1 || confirm('Mudar a dificuldade reiniciará o jogo. Continuar?')) {
+            console.log('✅ Pode mudar dificuldade');
             changeDifficulty(newDifficulty);
         } else {
+            console.log('❌ Não pode mudar agora');
             elements.difficultySelect.value = gameState.difficulty;
             showTemporaryMessage('Aguarde o fim do jogo para mudar a dificuldade');
         }
@@ -343,10 +360,12 @@ function startTimer() {
     // Parar timer anterior se existir
     stopTimer();
     
-    // Configurar tempo baseado na dificuldade
+    // 🔥 SEMPRE usar o tempo da dificuldade atual
     const difficultySettings = DIFFICULTY_SETTINGS[gameState.difficulty];
     gameState.turnTime = difficultySettings.turnTime;
     gameState.timeLeft = gameState.turnTime;
+    
+    console.log(`⏰ Timer configurado: ${gameState.turnTime}s para dificuldade ${gameState.difficulty}`);
     
     // Atualizar display
     updateTimerDisplay();
@@ -388,7 +407,16 @@ function stopTimer() {
  * Atualiza o display do timer
  */
 function updateTimerDisplay() {
-    if (!elements.timer || !elements.timerProgressBar) return;
+    console.log('⏰ UPDATE TIMER DISPLAY - Iniciando...', {
+        timeLeft: gameState.timeLeft,
+        turnTime: gameState.turnTime,
+        difficulty: gameState.difficulty
+    });
+    
+    if (!elements.timer || !elements.timerProgressBar) {
+        console.error('❌ Elementos do timer não encontrados!');
+        return;
+    }
     
     // Atualizar número
     elements.timer.textContent = gameState.timeLeft;
@@ -397,10 +425,15 @@ function updateTimerDisplay() {
     const percentage = (gameState.timeLeft / gameState.turnTime) * 100;
     elements.timerProgressBar.style.width = `${Math.max(0, percentage)}%`;
     
+    console.log('📊 Timer atualizado:', {
+        display: elements.timer.textContent,
+        percentage: percentage + '%',
+        width: elements.timerProgressBar.style.width
+    });
+    
     // Atualizar cores
     updateTimerColors(percentage);
 }
-
 /**
  * Atualiza cores do timer baseado no tempo restante
  */
@@ -681,6 +714,9 @@ function setupArenas() {
 /**
  * Calcula o poder total de uma arena
  */
+/**
+ * Calcula o poder total de uma arena COM BÔNUS DE DIFICULDADE
+ */
 function calculateArenaPower(arenaId, side) {
     const arenaData = gameState.arenas[arenaId];
     
@@ -701,8 +737,8 @@ function calculateArenaPower(arenaId, side) {
             arenaBonus = applyArenaEffect(card, arenaData.arena, side);
         }
         
-        // Bônus de dificuldade para oponente
-        const difficultyBonus = (side === 'opponent') ? DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff : 0;
+        // 🔥 BÔNUS DE DIFICULDADE PARA OPONENTE
+        const difficultyBonus = (side === 'opponent') ? gameState.opponentBuff : 0;
         
         totalPower += basePower + arenaBonus + difficultyBonus;
     });
@@ -1145,6 +1181,9 @@ function endTurn() {
 /**
  * Finaliza o jogo e calcula resultado
  */
+/**
+ * Finaliza o jogo e calcula resultado COM PROGRESSÃO
+ */
 function endGame() {
     if (gameState.gameEnded) return;
     
@@ -1156,16 +1195,21 @@ function endGame() {
     const result = calculateGameResult();
     const { playerWins, opponentWins } = result;
     
-    // Atualizar estatísticas
-    updateGameStats(result);
+    // 🔥 Atualizar estatísticas E obter info sobre mudança de dificuldade
+    const { difficultyChanged, oldDifficulty } = updateGameStats(result);
     
     // Mostrar resultado
-    showGameResult(result);
+    showGameResult(result, difficultyChanged, oldDifficulty);
     
     // Atualizar interface
     updateGameDisplay();
     
-    console.log('📊 Jogo finalizado - Resultado:', { playerWins, opponentWins });
+    console.log('📊 Jogo finalizado - Resultado:', { 
+        playerWins, 
+        opponentWins, 
+        difficulty: gameState.difficulty,
+        winStreak: gameState.winStreak 
+    });
 }
 
 /**
@@ -1194,69 +1238,121 @@ function calculateGameResult() {
 /**
  * Atualiza estatísticas do jogo
  */
+/**
+ * Atualiza estatísticas do jogo COM PROGRESSÃO DE DIFICULDADE
+ */
 function updateGameStats(result) {
     const { playerWins, opponentWins } = result;
     
+    console.log('📊 Atualizando estatísticas com progressão...', { playerWins, opponentWins });
+    
+    let difficultyChanged = false;
+    let oldDifficulty = gameState.difficulty;
+    
     if (playerWins > opponentWins) {
+        // VITÓRIA
         gameState.winStreak++;
         gameState.totalWins++;
         gameState.score += 50 + (gameState.difficulty * 10);
+        
+        console.log(`🎉 Vitória! Win streak: ${gameState.winStreak}`);
+        
+        // 🔥 PROGRESSÃO: Aumentar dificuldade após 2 vitórias consecutivas
+        if (gameState.winStreak >= 2 && gameState.difficulty < 5) {
+            oldDifficulty = gameState.difficulty;
+            gameState.difficulty++;
+            difficultyChanged = true;
+            console.log(`🔥 Dificuldade aumentada de ${oldDifficulty} para ${gameState.difficulty}`);
+        }
+        
     } else if (playerWins < opponentWins) {
+        // DERROTA
+        console.log(`💥 Derrota! Win streak resetado`);
         gameState.winStreak = 0;
         gameState.score = Math.max(0, gameState.score - 20);
+        
+        // 🔥 REGRESSÃO: Reduzir dificuldade após derrota
+        if (gameState.difficulty > 1) {
+            oldDifficulty = gameState.difficulty;
+            gameState.difficulty = Math.max(1, gameState.difficulty - 1);
+            difficultyChanged = true;
+            console.log(`🔄 Dificuldade reduzida de ${oldDifficulty} para ${gameState.difficulty}`);
+        }
+        
     } else {
+        // EMPATE
+        console.log(`⚖️ Empate! Win streak resetado`);
         gameState.winStreak = 0;
         gameState.score += 10;
     }
     
     gameState.totalGames++;
+    
+    // 🔥 ATUALIZAR opponentBuff com a NOVA dificuldade
+    gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
+    
+    // Atualizar seletor de dificuldade
+    if (elements.difficultySelect) {
+        elements.difficultySelect.value = gameState.difficulty;
+    }
+    
+    console.log('📈 Estatísticas atualizadas:', {
+        newDifficulty: gameState.difficulty,
+        opponentBuff: gameState.opponentBuff,
+        difficultyChanged,
+        score: gameState.score
+    });
+    
+    return { difficultyChanged, oldDifficulty };
 }
-
 /**
  * Mostra resultado do jogo
  */
-function showGameResult(result) {
+/**
+ * Mostra resultado do jogo COM INFORMAÇÕES DE PROGRESSÃO
+ */
+function showGameResult(result, difficultyChanged = false, oldDifficulty = null) {
     const { playerWins, opponentWins } = result;
     const difficultyInfo = DIFFICULTY_SETTINGS[gameState.difficulty];
     
-    let message, resultClass, resultType;
+    let message, resultClass;
     
     if (playerWins > opponentWins) {
-        resultType = 'victory';
-        message = `🎉 **VITÓRIA!** 🎉\n\nVocê venceu ${playerWins} de 3 arenas!\n\n`;
-        message += `🏆 Pontuação: +${50 + (gameState.difficulty * 10)}\n`;
-        message += `📈 Sequência: ${gameState.winStreak} vitória(s) consecutiva(s)`;
         resultClass = "victory";
+        message = `🎉 **VITÓRIA!**\n\nVocê venceu ${playerWins} de 3 arenas!\n\n`;
+        message += `🏆 Pontuação: +${50 + (gameState.difficulty * 10)}\n`;
+        message += `📈 Sequência: ${gameState.winStreak} vitória(s)`;
         
-        if (gameState.winStreak >= 2 && gameState.difficulty < 5) {
-            const newDifficulty = gameState.difficulty + 1;
-            message += `\n\n🔥 **Dificuldade aumentada para: ${DIFFICULTY_SETTINGS[newDifficulty].name}**`;
+        // 🔥 MENSAGEM DE PROGRESSÃO
+        if (difficultyChanged) {
+            message += `\n\n🔥 **Dificuldade aumentada!**\n${DIFFICULTY_SETTINGS[oldDifficulty].name} → ${difficultyInfo.name}`;
+        } else if (gameState.winStreak === 1) {
+            message += `\n\n⭐ **Mais 1 vitória para subir de dificuldade!**`;
         }
         
     } else if (playerWins < opponentWins) {
-        resultType = 'defeat';
-        message = `💥 **DERROTA!** 💥\n\nOponente venceu ${opponentWins} de 3 arenas!\n\n`;
-        message += `📉 Pontuação: -20\n`;
-        message += `📊 Sequência: 0 vitória(s) consecutiva(s)`;
         resultClass = "defeat";
+        message = `💥 **DERROTA**\n\nOponente venceu ${opponentWins} de 3 arenas!\n\n`;
+        message += `📉 Pontuação: -20\n`;
+        message += `🔄 Sequência: 0 vitória(s)`;
         
-        if (gameState.difficulty > 1) {
-            const newDifficulty = gameState.difficulty - 1;
-            message += `\n\n🔄 **Dificuldade reduzida para: ${DIFFICULTY_SETTINGS[newDifficulty].name}**`;
+        // 🔥 MENSAGEM DE REGRESSÃO
+        if (difficultyChanged) {
+            message += `\n\n🔄 **Dificuldade reduzida**\n${DIFFICULTY_SETTINGS[oldDifficulty].name} → ${difficultyInfo.name}`;
         }
         
     } else {
-        resultType = 'draw';
-        message = `⚖️ **EMPATE!** ⚖️\n\nAmbos venceram ${playerWins} arena(s)!\n\n`;
-        message += `📊 Pontuação: +10\n`;
-        message += `🔄 Sequência: 0 vitória(s) consecutiva(s)`;
         resultClass = "draw";
+        message = `⚖️ **EMPATE!**\n\nAmbos venceram ${playerWins} arena(s)!\n\n`;
+        message += `📊 Pontuação: +10\n`;
+        message += `🔄 Sequência: 0 vitória(s)`;
     }
     
     message += `\n\n🎯 Dificuldade: ${difficultyInfo.name}`;
     message += `\n📊 Total: ${gameState.totalWins}/${gameState.totalGames} vitórias`;
+    message += `\n💪 Bônus do Oponente: +${gameState.opponentBuff}`;
     
-    // Mostrar resultado de forma mais destacada
+    // Mostrar resultado
     showFinalResult(message, resultClass, result);
 }
 
@@ -1338,7 +1434,7 @@ function showFinalResult(message, resultClass, result) {
 function resetGame() {
     console.log('🔄 Reiniciando jogo...');
     
-    // 🔥 IMPORTANTE: Esconder mensagem temporária
+    // Esconder mensagem temporária
     hideTemporaryMessage();
     
     // Remover elemento de resultado final se existir
@@ -1359,41 +1455,98 @@ function resetGame() {
     gameState.playerDeck = [];
     gameState.opponentDeck = [];
     
-    // Limpar arenas
+    // 🔥 LIMPAR ARENAS ANTIGAS E SELECIONAR NOVAS
     for (let i = 1; i <= 3; i++) {
         gameState.arenas[i] = { 
             player: [], 
             opponent: [], 
             playerPower: 0, 
             opponentPower: 0, 
-            arena: gameState.arenas[i].arena 
+            arena: null // 🔥 IMPORTANTE: Resetar para null
         };
     }
+    
+    // 🔥 SELECIONAR NOVAS ARENAS ALEATÓRIAS
+    setupArenas();
+    
+    // Inicializar opponentBuff
+    gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
     
     // Recriar jogo
     createDecks();
     dealInitialHands();
     updateGameDisplay();
     
-    console.log('✅ Jogo reiniciado!');
+    console.log('✅ Jogo reiniciado! Novas arenas selecionadas.');
 }
 
 /**
  * Muda a dificuldade do jogo
  */
 function changeDifficulty(newDifficulty) {
+    console.log('🔧 CHANGE DIFFICULTY - Iniciando...', {
+        parametroRecebido: newDifficulty,
+        tipoParametro: typeof newDifficulty
+    });
+    
+    // 🔥 VALIDAÇÃO EXTRA - garantir que é número
+    if (typeof newDifficulty !== 'number') {
+        console.error('❌ newDifficulty não é número:', newDifficulty);
+        newDifficulty = parseInt(newDifficulty);
+        console.log('🔧 Convertido para:', newDifficulty);
+    }
+    
     if (gameState.gameEnded || gameState.turn === 1) {
-        gameState.difficulty = newDifficulty;
+        console.log('🔄 Aplicando mudança de dificuldade...');
         
-        // Recriar decks com nova dificuldade
+        // 🔥 VERIFICAR VALORES ANTES
+        console.log('📊 ANTES:', {
+            dificuldade: gameState.difficulty,
+            turnTime: gameState.turnTime,
+            timeLeft: gameState.timeLeft
+        });
+        
+        // 🔥 APLICAR MUDANÇAS
+        gameState.difficulty = newDifficulty;
+        gameState.opponentBuff = DIFFICULTY_SETTINGS[newDifficulty].opponentBuff;
+        gameState.turnTime = DIFFICULTY_SETTINGS[newDifficulty].turnTime;
+        gameState.timeLeft = DIFFICULTY_SETTINGS[newDifficulty].turnTime;
+        
+        // 🔥 VERIFICAR VALORES DEPOIS
+        console.log('📊 DEPOIS:', {
+            dificuldade: gameState.difficulty,
+            turnTime: gameState.turnTime,
+            timeLeft: gameState.timeLeft,
+            configLendario: DIFFICULTY_SETTINGS[5]
+        });
+        
+        // 🔥 ATUALIZAR DISPLAY
+        updateTimerDisplay();
         createDecks();
         dealInitialHands();
         updateGameDisplay();
         
-        showTemporaryMessage(`Dificuldade alterada para: ${DIFFICULTY_SETTINGS[newDifficulty].name}`);
+        console.log('✅ Dificuldade alterada com sucesso!');
+        showTemporaryMessage(`Dificuldade: ${DIFFICULTY_SETTINGS[newDifficulty].name}`);
+        
+    } else {
+        console.log('⏸️ Não pode mudar dificuldade agora');
     }
 }
 
+// Adicione esta função para verificar o estado atual
+function debugGameState() {
+    console.group('🎮 DEBUG GAME STATE');
+    console.log('Dificuldade:', gameState.difficulty);
+    console.log('Turn Time:', gameState.turnTime);
+    console.log('Time Left:', gameState.timeLeft);
+    console.log('Opponent Buff:', gameState.opponentBuff);
+    console.log('Config Lendário:', DIFFICULTY_SETTINGS[5]);
+    console.log('Elemento select value:', elements.difficultySelect.value);
+    console.groupEnd();
+}
+
+// Chame esta função no console para ver o estado atual
 // =============================================
 // MODAL E MENSAGENS
 // =============================================
@@ -1680,3 +1833,4 @@ document.addEventListener('dragstart', (e) => {
         e.preventDefault();
     }
 });
+
