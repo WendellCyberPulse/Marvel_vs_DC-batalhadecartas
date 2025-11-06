@@ -249,6 +249,21 @@ function createCardElement(card) {
     cardElement.className = `card ${card.universe}`;
     cardElement.dataset.id = card.id;
     
+    // Construir tags de atributos
+    let attributeTags = '';
+    
+    if (card.gender) {
+        attributeTags += `<span class="attribute-tag attribute-gender-${card.gender}">${card.gender === 'female' ? '♀ Feminino' : '♂ Masculino'}</span>`;
+    }
+    
+    if (card.rarity) {
+        attributeTags += `<span class="attribute-tag attribute-rarity-${card.rarity}">${card.rarity === 'rare' ? '⭐ Rara' : card.rarity}</span>`;
+    }
+    
+    if (card.attributes) {
+        attributeTags += `<span class="attribute-tag attribute-tech">🔧 ${card.attributes}</span>`;
+    }
+    
     cardElement.innerHTML = `
         <div class="card-header">${card.name}</div>
         <div class="card-image" style="background-image: url('${card.image}')"></div>
@@ -274,6 +289,7 @@ function createCardElement(card) {
                 <span class="stat-value">${calculateCardPower(card)}</span>
             </div>
         </div>
+        ${attributeTags ? `<div class="card-attributes">${attributeTags}</div>` : ''}
     `;
     
     return cardElement;
@@ -358,15 +374,26 @@ function opponentPlay() {
 
 function calculateArenaPower(arenaId, side) {
     const arenaData = gameState.arenas[arenaId];
-    let basePower = arenaData[side].reduce((total, card) => {
-        return total + calculateCardPower(card);
-    }, 0);
+    let totalPower = 0;
     
-    if (side === 'opponent') {
-        basePower += gameState.opponentBuff;
-    }
+    arenaData[side].forEach(card => {
+        const basePower = calculateCardPower(card);
+        let arenaBonus = 0;
+        
+        // Aplicar efeito da arena se disponível
+        if (typeof applyArenaEffect === 'function' && arenaData.arena) {
+            arenaBonus = applyArenaEffect(card, arenaData.arena, side);
+        }
+        
+        // Aplicar bônus de dificuldade apenas para o oponente
+        if (side === 'opponent') {
+            totalPower += basePower + arenaBonus + gameState.opponentBuff;
+        } else {
+            totalPower += basePower + arenaBonus;
+        }
+    });
     
-    return basePower;
+    return totalPower;
 }
 
 function updateArenasDisplay() {
@@ -396,6 +423,25 @@ function updateArenasDisplay() {
         
         const playerPowerElement = document.getElementById(`power-arena-${i}-player`);
         const opponentPowerElement = document.getElementById(`power-arena-${i}-opponent`);
+
+        let playerDisplayPower = arenaData.playerPower;
+        let opponentDisplayPower = arenaData.opponentPower;
+
+        const playerHasBonus = arenaData.player.some(card => 
+            typeof applyArenaEffect === 'function' && arenaData.arena && 
+            applyArenaEffect(card, arenaData.arena, 'player') > 0
+        );
+
+        const opponentHasBonus = arenaData.opponent.some(card => 
+            typeof applyArenaEffect === 'function' && arenaData.arena && 
+            applyArenaEffect(card, arenaData.arena, 'opponent') > 0
+        );
+
+        playerPowerElement.className = `power-value ${playerHasBonus ? 'with-bonus' : ''}`;
+        opponentPowerElement.className = `power-value ${opponentHasBonus ? 'with-bonus' : ''}`;
+        
+        playerPowerElement.textContent = playerDisplayPower;
+        opponentPowerElement.textContent = opponentDisplayPower;
         
         playerPowerElement.textContent = arenaData.playerPower;
         opponentPowerElement.textContent = arenaData.opponentPower;
