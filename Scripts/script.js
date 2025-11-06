@@ -372,20 +372,50 @@ function opponentPlay() {
     }, 1500);
 }
 
+// FUNÇÃO ESPECIAL: Para a arena Central City (Speed Decides)
+function calculateSpeedDecidesPower(arenaData, side) {
+    const cards = arenaData[side];
+    
+    // Se não há cartas, poder é 0
+    if (cards.length === 0) return 0;
+    
+    // Encontrar a carta com MAIOR velocidade
+    const fastestCard = cards.reduce((fastest, current) => {
+        return current.speed > fastest.speed ? current : fastest;
+    });
+    
+    // O poder total é baseado APENAS na velocidade da carta mais rápida
+    let speedPower = fastestCard.speed * 2; // Dobra o valor da velocidade
+    
+    // Bônus de dificuldade para oponente
+    if (side === 'opponent') {
+        speedPower += gameState.opponentBuff;
+    }
+    
+    console.log(`🎯 Speed Decides: ${side} - ${fastestCard.name} com ${fastestCard.speed} velocidade = ${speedPower} poder`);
+    
+    return speedPower;
+}
+
 function calculateArenaPower(arenaId, side) {
     const arenaData = gameState.arenas[arenaId];
+    
+    // CASO ESPECIAL: Speed Decides (Central City)
+    if (arenaData.arena && arenaData.arena.effectType === 'speed_decides') {
+        return calculateSpeedDecidesPower(arenaData, side);
+    }
+    
+    // CASO NORMAL: Cálculo de poder padrão
     let totalPower = 0;
     
     arenaData[side].forEach(card => {
         const basePower = calculateCardPower(card);
         let arenaBonus = 0;
         
-        // Aplicar efeito da arena se disponível
         if (typeof applyArenaEffect === 'function' && arenaData.arena) {
             arenaBonus = applyArenaEffect(card, arenaData.arena, side);
         }
         
-        // Aplicar bônus de dificuldade apenas para o oponente
         if (side === 'opponent') {
             totalPower += basePower + arenaBonus + gameState.opponentBuff;
         } else {
@@ -400,6 +430,14 @@ function updateArenasDisplay() {
     for (let i = 1; i <= 3; i++) {
         const arenaData = gameState.arenas[i];
         const arenaElement = document.getElementById(`arena-${i}`);
+
+        // DESTACAR ARENA SPEED DECIDES
+        arenaElement.classList.remove('speed-arena');
+        if (arenaData.arena && arenaData.arena.effectType === 'speed_decides') {
+            arenaElement.classList.add('speed-arena');
+        }
+
+
         
         if (arenaData.arena && arenaData.arena.image) {
             arenaElement.style.backgroundImage = `url('${arenaData.arena.image}')`;
@@ -478,7 +516,40 @@ function updateArenasDisplay() {
         } else if (arenaData.playerPower < arenaData.opponentPower) {
             arenaElement.classList.add('losing');
         }
+         // MOSTRAR CARTA MAIS RÁPIDA EM SPEED DECIDES
+        if (arenaData.arena && arenaData.arena.effectType === 'speed_decides') {
+            showFastestCard(arenaData, i);
+        }
     }
+
+    
+}
+
+function showFastestCard(arenaData, arenaId) {
+    const playerContainer = document.getElementById(`arena-${arenaId}-player`);
+    const opponentContainer = document.getElementById(`arena-${arenaId}-opponent`);
+    
+    // Encontrar cartas mais rápidas de cada lado
+    const playerFastest = arenaData.player.length > 0 ? 
+        arenaData.player.reduce((a, b) => a.speed > b.speed ? a : b) : null;
+    const opponentFastest = arenaData.opponent.length > 0 ? 
+        arenaData.opponent.reduce((a, b) => a.speed > b.speed ? a : b) : null;
+    
+    // Destacar cartas mais rápidas
+    highlightFastestCard(playerContainer, playerFastest);
+    highlightFastestCard(opponentContainer, opponentFastest);
+}
+
+function highlightFastestCard(container, fastestCard) {
+    if (!fastestCard) return;
+    
+    const cardElements = container.querySelectorAll('.arena-card');
+    cardElements.forEach(cardElement => {
+        cardElement.classList.remove('fastest-card');
+        if (cardElement.textContent === fastestCard.name) {
+            cardElement.classList.add('fastest-card');
+        }
+    });
 }
 
 function endTurn() {
