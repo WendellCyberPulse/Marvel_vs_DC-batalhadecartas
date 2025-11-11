@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marvel vs DC - Singleplayer</title>
+    <link rel="icon" href="./imgs/super-heroi.png" type="image/x-icon">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header role="banner">
+        <h1>MARVEL vs DC</h1>
+        <p class="subtitle">Batalha Estratégica por Turnos</p>
+    </header>
+
+    <!-- Container Principal -->
+    <main class="game-container" role="main">
+        
+        <!-- Informações do Jogo -->
+        <section class="game-info" aria-label="Informações do jogo">
+            <div class="game-stats">
+                <div class="score">Pontuação: <span id="score-value">0</span></div>
+                <div class="turn-counter">Turno: <span id="turn-value">1</span>/4</div>
+                <div class="player-turn" id="player-turn">
+                    Dificuldade: Iniciante
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="difficulty-select">
+                    <label for="difficulty-select">Dificuldade:</label>
+                    <select id="difficulty-select" aria-label="Selecionar dificuldade">
+                        <option value="1">Iniciante</option>
+                        <option value="2">Intermediário</option>
+                        <option value="3">Avançado</option>
+                        <option value="4">Especialista</option>
+                        <option value="5">Lendário</option>
+                    </select>
+                </div>
+                <button id="end-turn-btn" aria-label="Finalizar turno atual">Finalizar Turno</button>
+                <button id="battle-btn" disabled aria-label="Iniciar batalha final">Batalhar!</button>
+                <button id="reset-btn" aria-label="Começar novo jogo">Novo Jogo</button>
+                <button aria-label="Voltar ao Lobby" onclick="window.location.href='index.html'">Lobby</button>
+            </div>
+
+            <div class="timer-container">
+                <div class="timer-label">Tempo:</div>
+                <div class="timer" id="timer">90</div>
+                <div class="timer-progress">
+                    <div class="timer-progress-bar" id="timer-progress-bar"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Área das Arenas -->
+        <section class="arena-container" aria-label="Arenas de batalha">
+            <h2 class="arena-title" id="arena-title">Arena Central</h2>
+            <div class="arenas">
+                <div class="arena" id="arena-1" data-arena="1" role="region" aria-label="Arena 1">
+                    <h3>Arena 1</h3>
+                    <div class="arena-cards">
+                        <div class="player-side">
+                            <div class="power-value" id="power-arena-1-player">0</div>
+                            <div class="arena-cards-container" id="arena-1-player"></div>
+                        </div>
+                        <div class="opponent-side">
+                            <div class="power-value" id="power-arena-1-opponent">0</div>
+                            <div class="arena-cards-container" id="arena-1-opponent"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="arena" id="arena-2" data-arena="2" role="region" aria-label="Arena 2">
+                    <h3>Arena 2</h3>
+                    <div class="arena-cards">
+                        <div class="player-side">
+                            <div class="power-value" id="power-arena-2-player">0</div>
+                            <div class="arena-cards-container" id="arena-2-player"></div>
+                        </div>
+                        <div class="opponent-side">
+                            <div class="power-value" id="power-arena-2-opponent">0</div>
+                            <div class="arena-cards-container" id="arena-2-opponent"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="arena" id="arena-3" data-arena="3" role="region" aria-label="Arena 3">
+                    <h3>Arena 3</h3>
+                    <div class="arena-cards">
+                        <div class="player-side">
+                            <div class="power-value" id="power-arena-3-player">0</div>
+                            <div class="arena-cards-container" id="arena-3-player"></div>
+                        </div>
+                        <div class="opponent-side">
+                            <div class="power-value" id="power-arena-3-opponent">0</div>
+                            <div class="arena-cards-container" id="arena-3-opponent"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Mão do Jogador -->
+        <section class="hand-container" aria-label="Suas cartas">
+            <h2>Sua Mão</h2>
+            <div class="hand-cards" id="player-hand" role="list" aria-label="Cartas na sua mão">
+                <!-- Cartas serão inseridas aqui -->
+            </div>
+        </section>
+
+        <!-- Decks Disponíveis -->
+        <section class="decks-container" aria-label="Decks disponíveis">
+            <div class="deck marvel-deck">
+                <h2 class="deck-title marvel-title">Universo Marvel</h2>
+                <div class="cards-container" id="marvel-cards" role="list" aria-label="Cartas do universo Marvel">
+                    <!-- Cartas Marvel serão geradas aqui -->
+                </div>
+            </div>
+
+            <div class="deck dc-deck">
+                <h2 class="deck-title dc-title">Universo DC</h2>
+                <div class="cards-container" id="dc-cards" role="list" aria-label="Cartas do universo DC">
+                    <!-- Cartas DC serão geradas aqui -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Resultado da Batalha -->
+        <div id="battle-result" class="battle-result" role="alert" aria-live="polite">
+            <!-- Resultado será mostrado aqui -->
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer role="contentinfo">
+        <p>Jogo de Cartas Marvel vs DC - Batalha Estratégica por Turnos</p>
+    </footer>
+
+    <!-- Modal de Resultado -->
+    <div id="result-modal" class="modal" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Resultado da Batalha</h2>
+                <button class="close-modal" aria-label="Fechar modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-message"></div>
+                <div class="modal-stats" id="modal-stats"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="modal-new-game" class="modal-btn new-game-btn">Novo Jogo</button>
+                <button id="modal-close" class="modal-btn close-btn">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts apenas do singleplayer/core -->
+    <script src="Scripts/character.js"></script>
+    <script src="Scripts/script.js"></script>
+    <script src="Scripts/arenas.js"></script>
+</body>
+</html>

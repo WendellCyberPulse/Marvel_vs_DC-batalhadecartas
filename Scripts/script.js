@@ -79,7 +79,18 @@ const elements = {
     modalStats: document.getElementById('modal-stats'),
     modalNewGame: document.getElementById('modal-new-game'),
     modalClose: document.getElementById('modal-close'),
-    closeModal: document.querySelector('.close-modal')
+    closeModal: document.querySelector('.close-modal'),
+
+    // Multiplayer UI
+    openMultiplayerBtn: document.getElementById('open-multiplayer-btn'),
+    multiplayerModal: document.getElementById('multiplayer-modal'),
+    mpUsername: document.getElementById('mp-username'),
+    mpRoomCode: document.getElementById('mp-room-code'),
+    mpGenerateBtn: document.getElementById('mp-generate'),
+    mpJoinBtn: document.getElementById('mp-join'),
+    mpReadyBtn: document.getElementById('mp-ready'),
+    mpGeneratedCode: document.getElementById('mp-generated-code'),
+    multiplayerClose: document.getElementById('multiplayer-close')
 };
 
 // =============================================
@@ -120,13 +131,64 @@ function initGame() {
     //gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
     
     setupEventListeners();
+    setupMultiplayerUI();
     setupClickOutsideHandler();
-    setupArenas();
-    createDecks();
-    dealInitialHands();
-    updateGameDisplay();
+    // Em multiplayer, inicialize arenas de forma determinística usando seed da sala
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        // neutralizar buff em multiplayer para resultados consistentes
+        gameState.opponentBuff = 0;
+        if (code && window.Multiplayer && Multiplayer.getRoomOnce) {
+            Multiplayer.getRoomOnce(code).then(room => {
+                // Use seed da sala; se indisponível, derive do código para manter sincronização
+                const derivedSeed = (room && room.gameSeed) ? room.gameSeed : hashString(code);
+                gameState.multiplayerSeed = derivedSeed;
+                setupArenas(derivedSeed);
+                createDecks();
+                // Finalizar renderização somente após decks criados
+                dealInitialHands();
+                renderUniverseCatalogs();
+                updateGameDisplay();
+            }).catch(() => {
+                // Fallback determinístico usando o código da sala
+                const fallbackSeed = hashString(code);
+                gameState.multiplayerSeed = fallbackSeed;
+                setupArenas(fallbackSeed);
+                createDecks();
+                dealInitialHands();
+                renderUniverseCatalogs();
+                updateGameDisplay();
+            });
+        } else {
+            // Caso extremo: sem código/sala, seguir fluxo padrão (não sincronizado)
+            setupArenas();
+            createDecks();
+            dealInitialHands();
+            renderUniverseCatalogs();
+            updateGameDisplay();
+        }
+    } else {
+        setupArenas();
+        createDecks();
+        dealInitialHands();
+        // Renderizar catálogos de cartas dos universos
+        renderUniverseCatalogs();
+        updateGameDisplay();
+    }
     
     console.log('✅ Jogo inicializado! Dificuldade:', gameState.difficulty, 'Opponent Buff:', gameState.opponentBuff);
+    // Modo multiplayer: oculta botão de lobby e começa a escutar a sala
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        elements.openMultiplayerBtn && (elements.openMultiplayerBtn.style.display = 'none');
+        if (code && window.Multiplayer && Multiplayer.listenRoom) {
+            Multiplayer.listenRoom(code, (data) => updateMultiplayerStatusUI(data));
+            if (Multiplayer.listenActions) {
+                Multiplayer.listenActions(code, handleRemoteAction);
+            }
+            showTemporaryMessage(`Multiplayer ativo • Sala ${code}`);
+        }
+    }
 }
 
 /**
@@ -239,6 +301,12 @@ function initializeDOMElements() {
  * Configura o seletor de dificuldade
  */
 function setupDifficultySelector() {
+    // Em páginas sem seletor de dificuldade (ex.: multiplayer_game.html), apenas ignore
+    if (!elements.difficultySelect) {
+        console.log('ℹ️ Seletor de dificuldade não presente nesta página. Ignorando configuração.');
+        return;
+    }
+
     elements.difficultySelect.value = gameState.difficulty;
     
     elements.difficultySelect.addEventListener('change', (e) => {
@@ -256,7 +324,9 @@ function setupDifficultySelector() {
             changeDifficulty(newDifficulty);
         } else {
             console.log('❌ Não pode mudar agora');
-            elements.difficultySelect.value = gameState.difficulty;
+            if (elements.difficultySelect) {
+                elements.difficultySelect.value = gameState.difficulty;
+            }
             showTemporaryMessage('Aguarde o fim do jogo para mudar a dificuldade');
         }
     });
@@ -301,6 +371,127 @@ function setupEventListeners() {
     
     // Drag and drop para cartas
     setupDragAndDrop();
+}
+
+/**
+ * Configura UI e eventos do modal de Multiplayer
+ */
+function setupMultiplayerUI() {
+    // Se não existir o botão/modal, não faz nada
+    if (!elements.openMultiplayerBtn || !elements.multiplayerModal) return;
+
+    // Abrir/fechar modal
+    elements.openMultiplayerBtn.addEventListener('click', showMultiplayerModal);
+    elements.multiplayerClose && elements.multiplayerClose.addEventListener('click', hideMultiplayerModal);
+    elements.multiplayerModal.addEventListener('click', (e) => {
+        if (e.target === elements.multiplayerModal) hideMultiplayerModal();
+    });
+
+    // Gerar sala
+    elements.mpGenerateBtn && elements.mpGenerateBtn.addEventListener('click', async () => {
+        const username = (elements.mpUsername?.value || '').trim();
+        if (!username) { showTemporaryMessage('Informe seu nome para gerar o código.'); return; }
+        if (!window.Multiplayer || !Multiplayer.createRoom) { showTemporaryMessage('Multiplayer não inicializado.'); return; }
+        try {
+            const result = await Multiplayer.createRoom(username);
+            const code = result.code;
+            elements.mpRoomCode.value = code;
+            elements.mpGeneratedCode.textContent = `Código gerado: ${code}`;
+            showTemporaryMessage('Sala criada. Compartilhe o código com seu amigo.');
+            // Começa a escutar atualizações da sala
+            Multiplayer.listenRoom(code, (data) => updateMultiplayerStatusUI(data));
+        } catch (err) {
+            console.error('Erro ao criar sala:', err);
+            showTemporaryMessage('Erro ao criar sala. Verifique o Firebase.');
+        }
+    });
+
+    // Entrar na sala
+    elements.mpJoinBtn && elements.mpJoinBtn.addEventListener('click', async () => {
+        const username = (elements.mpUsername?.value || '').trim();
+        const code = (elements.mpRoomCode?.value || '').trim().toUpperCase();
+        if (!username || !code) { showTemporaryMessage('Informe nome e código da sala.'); return; }
+        if (!window.Multiplayer || !Multiplayer.joinRoom) { showTemporaryMessage('Multiplayer não inicializado.'); return; }
+        try {
+            await Multiplayer.joinRoom(code, username);
+            elements.mpGeneratedCode.textContent = `Conectado à sala ${code}`;
+            showTemporaryMessage('Entrou na sala. Aguarde o outro jogador.');
+            Multiplayer.listenRoom(code, (data) => updateMultiplayerStatusUI(data));
+        } catch (err) {
+            console.error('Erro ao entrar na sala:', err);
+            showTemporaryMessage('Não foi possível entrar na sala.');
+        }
+    });
+
+    // Ficar pronto
+    elements.mpReadyBtn && elements.mpReadyBtn.addEventListener('click', async () => {
+        const code = (elements.mpRoomCode?.value || '').trim().toUpperCase();
+        if (!code) { showTemporaryMessage('Nenhuma sala selecionada.'); return; }
+        try {
+            await Multiplayer.setReady(code, true);
+            // tenta iniciar se ambos estiverem prontos
+            Multiplayer.startIfBothReady && Multiplayer.startIfBothReady(code);
+            showTemporaryMessage('Você está pronto!');
+        } catch (err) {
+            console.error('Erro ao marcar pronto:', err);
+        }
+    });
+}
+
+function showMultiplayerModal() {
+    elements.multiplayerModal?.classList.add('show');
+}
+
+function hideMultiplayerModal() {
+    elements.multiplayerModal?.classList.remove('show');
+}
+// Utilitários de URL/modo
+function getURLParam(key) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(key);
+}
+
+function isMultiplayerMode() {
+    const mode = getURLParam('mode');
+    return mode === 'mp';
+}
+
+function updateMultiplayerStatusUI(roomData) {
+    // Atualiza feedback simples no modal conforme estado da sala
+    if (!roomData) return;
+    const { status, players } = roomData;
+    // 🔁 Se a seed da partida mudou, reinicializa localmente com a nova seed para sincronizar arenas
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        const newSeed = roomData.gameSeed || (code ? hashString(code) : null);
+        if (newSeed && newSeed !== gameState.multiplayerSeed) {
+            console.log('🔁 Detectado nova seed na sala. Reiniciando com seed:', newSeed);
+            gameState.multiplayerSeed = newSeed;
+            restartMultiplayerWithSeed(newSeed);
+        }
+    }
+    let text = `Status: ${status || 'desconhecido'}`;
+    if (players) {
+        const names = Object.values(players).map(p => `${p.username}${p.ready ? ' ✅' : ''}`).join(' vs ');
+        text += ` | Jogadores: ${names}`;
+    }
+    if (elements.mpGeneratedCode) {
+        elements.mpGeneratedCode.textContent = text;
+    }
+    // Se a sala mudou para 'playing', podemos fechar modal
+    if (status === 'playing') {
+        hideMultiplayerModal();
+        showTemporaryMessage('Partida iniciada!');
+        // Redireciona para a tela de jogo multiplayer se estiver no lobby (multiplayer.html)
+        if (!isMultiplayerMode()) {
+            const code = (elements.mpRoomCode?.value || '').trim().toUpperCase() || roomData.code;
+            const uid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+            const role = roomData.hostId && uid && roomData.hostId === uid ? 'host' : 'guest';
+            const url = `index.html?mode=mp&code=${encodeURIComponent(code)}&role=${encodeURIComponent(role || '')}`;
+            console.log('🔀 Redirecionando para tela multiplayer:', url);
+            window.location.href = url;
+        }
+    }
 }
 
 /**
@@ -503,7 +694,9 @@ function timeUp() {
         // Atualizar display e iniciar jogada da IA
         setTimeout(() => {
             updateGameDisplay();
-            opponentPlay();
+            if (!isMultiplayerMode()) {
+                opponentPlay();
+            }
             elements.timerContainer.style.animation = 'none';
         }, 1500);
     }
@@ -660,6 +853,18 @@ async function playCardToArena(arenaId) {
     // Resetar seleção
     gameState.selectedCardId = null;
     elements.battleResult.style.display = 'none';
+
+    // Enviar ação para o oponente (multiplayer)
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        try {
+            if (code && window.Multiplayer && Multiplayer.sendAction) {
+                await Multiplayer.sendAction(code, { type: 'play', arenaId, card });
+            }
+        } catch (err) {
+            console.warn('Não foi possível enviar ação multiplayer:', err);
+        }
+    }
     
     // Continuar fluxo do jogo
     continueGameAfterPlay();
@@ -669,14 +874,55 @@ async function playCardToArena(arenaId) {
  * Continua o jogo após jogada do jogador
  */
 function continueGameAfterPlay() {
-    if (gameState.turn >= gameState.maxTurns) {
+    // Em multiplayer, não finalize imediatamente ao atingir o último turno do jogador;
+    // aguarde a jogada do oponente e a progressão de turno sincronizada.
+    if (gameState.turn >= gameState.maxTurns && !isMultiplayerMode()) {
         setTimeout(() => endGame(), 1000);
     } else {
         setTimeout(() => {
             gameState.currentPlayer = 'opponent';
             updateGameDisplay();
-            opponentPlay();
+            if (!isMultiplayerMode()) {
+                opponentPlay();
+            }
         }, 1000);
+    }
+}
+
+// Processa ação recebida do oponente (multiplayer)
+function handleRemoteAction(entry) {
+    if (!entry || !entry.action) return;
+    const { action, uid } = entry;
+    const myUid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+    if (myUid && uid === myUid) return; // ignora ações próprias
+
+    if (action.type === 'play') {
+        const arenaId = action.arenaId;
+        const card = action.card;
+        (async () => {
+            try {
+                await animateOpponentCard(arenaId, card);
+                gameState.arenas[arenaId].opponent.push(card);
+                gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                updateArenasDisplay();
+                endOpponentTurn(); // avança turno de volta ao jogador
+            } catch (e) {
+                console.error('Falha ao aplicar ação remota:', e);
+            }
+        })();
+    }
+    
+    if (action.type === 'end_game') {
+        // Exibir resultado para ambos os jogadores quando qualquer lado finalizar
+        if (gameState.gameEnded) return; // evitar duplicidade
+        console.log('📡 Recebido end_game remoto');
+        gameState.gameEnded = true;
+        gameState.currentPlayer = 'none';
+        // Importante: sempre recalcular localmente para perspectiva correta
+        const result = calculateGameResult();
+        const { difficultyChanged, oldDifficulty } = updateGameStats(result);
+        showGameResult(result, difficultyChanged, oldDifficulty);
+        updateGameDisplay();
     }
 }
 
@@ -687,9 +933,11 @@ function continueGameAfterPlay() {
 /**
  * Configura as arenas para a partida
  */
-function setupArenas() {
+function setupArenas(seed = null) {
     if (typeof selectRandomArenas === 'function') {
-        const selectedArenas = selectRandomArenas();
+        const selectedArenas = (seed !== null && typeof selectRandomArenasSeeded === 'function')
+            ? selectRandomArenasSeeded(seed)
+            : selectRandomArenas();
         
         // Atualizar arenas no estado do jogo
         for (let i = 1; i <= 3; i++) {
@@ -709,6 +957,50 @@ function setupArenas() {
             };
         }
     }
+}
+
+// RNG determinístico baseado em seed (mulberry32)
+function seededRandom(seed) {
+    let t = seed >>> 0;
+    return function() {
+        t += 0x6D2B79F5;
+        let r = Math.imul(t ^ (t >>> 15), 1 | t);
+        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// Seleção de arenas determinística a partir do seed da sala
+function selectRandomArenasSeeded(seed) {
+    const all = (typeof arenas !== 'undefined')
+        ? [...arenas.marvel, ...arenas.dc, ...arenas.neutral].filter(a => a.effectType !== 'shuffle_stats')
+        : [];
+    const rnd = seededRandom(Number(seed) || 123456);
+    const picked = [];
+    const pool = [...all];
+    for (let i = 0; i < 3 && pool.length > 0; i++) {
+        const idx = Math.floor(rnd() * pool.length);
+        picked.push(pool.splice(idx, 1)[0]);
+    }
+    return picked;
+}
+
+// Hash simples para string
+function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < (str || '').length; i++) {
+        h ^= (str.charCodeAt(i) & 0xff);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+// Bônus determinístico para arenas com efeito shuffle_stats
+function deterministicShuffleBonus(arenaId, card, side) {
+    const baseSeed = Number(gameState.multiplayerSeed || 0) ^ (arenaId * 2654435761) ^ hashString(card.name || '') ^ (side === 'opponent' ? 0x9E3779B9 : 0x85EBCA6B);
+    const rnd = seededRandom(baseSeed);
+    // mapear para inteiro no intervalo [-10, 10]
+    return Math.floor(rnd() * 21) - 10;
 }
 
 /**
@@ -732,9 +1024,15 @@ function calculateArenaPower(arenaId, side) {
         const basePower = calculateCardPower(card);
         let arenaBonus = 0;
         
-        // Aplicar efeito da arena se a função existir
-        if (typeof applyArenaEffect === 'function' && arenaData.arena) {
-            arenaBonus = applyArenaEffect(card, arenaData.arena, side);
+        // Aplicar efeito da arena se existir
+        if (arenaData.arena) {
+            // Em multiplayer, usamos bônus determinístico para efeitos "shuffle_stats"
+            // No singleplayer, mantemos o comportamento original (aleatório) via applyArenaEffect
+            if (arenaData.arena.effectType === 'shuffle_stats' && isMultiplayerMode()) {
+                arenaBonus = deterministicShuffleBonus(arenaId, card, side);
+            } else if (typeof applyArenaEffect === 'function') {
+                arenaBonus = applyArenaEffect(card, arenaData.arena, side);
+            }
         }
         
         // 🔥 BÔNUS DE DIFICULDADE PARA OPONENTE
@@ -826,14 +1124,30 @@ function updateArenaCards(arenaData, arenaId) {
     if (playerContainer) {
         playerContainer.innerHTML = '';
         arenaData.player.forEach(card => {
-            playerContainer.appendChild(createArenaCardElement(card));
+            const basePower = calculateCardPower(card);
+            const arenaBonus = (typeof applyArenaEffect === 'function' && arenaData.arena)
+                ? applyArenaEffect(card, arenaData.arena, 'player')
+                : 0;
+            const adjustedPower = basePower + arenaBonus;
+            const badges = [];
+            if (arenaBonus) badges.push(`Arena +${arenaBonus}`);
+            playerContainer.appendChild(createArenaCardElement(card, adjustedPower, badges));
         });
     }
     
     if (opponentContainer) {
         opponentContainer.innerHTML = '';
         arenaData.opponent.forEach(card => {
-            opponentContainer.appendChild(createArenaCardElement(card));
+            const basePower = calculateCardPower(card);
+            const arenaBonus = (typeof applyArenaEffect === 'function' && arenaData.arena)
+                ? applyArenaEffect(card, arenaData.arena, 'opponent')
+                : 0;
+            const difficultyBonus = gameState.opponentBuff || 0;
+            const adjustedPower = basePower + arenaBonus + difficultyBonus;
+            const badges = [];
+            if (arenaBonus) badges.push(`Arena +${arenaBonus}`);
+            if (difficultyBonus) badges.push(`IA +${difficultyBonus}`);
+            opponentContainer.appendChild(createArenaCardElement(card, adjustedPower, badges));
         });
     }
     
@@ -846,14 +1160,14 @@ function updateArenaCards(arenaData, arenaId) {
 /**
  * Cria elemento de carta para arena
  */
-function createArenaCardElement(card) {
+function createArenaCardElement(card, adjustedPower = null, badges = []) {
     const cardElement = document.createElement('div');
     cardElement.className = `arena-card ${card.universe}`;
     cardElement.dataset.id = card.id;
     cardElement.title = `${card.name} - Poder: ${calculateCardPower(card)}`;
     
     // Calcular poder total
-    const totalPower = calculateCardPower(card);
+    const totalPower = (adjustedPower != null) ? adjustedPower : calculateCardPower(card);
     
     // HTML da carta com foto e stats
     cardElement.innerHTML = `
@@ -877,8 +1191,8 @@ function createArenaCardElement(card) {
                 <span class="arena-card-stat-name">Durabilidade</span>
                 <span class="arena-card-stat-value">${card.durability || 0}</span>
             </div>
-            <div class="arena-card-total-power">Total: ${totalPower}</div>
         </div>
+        ${badges && badges.length ? `<div class=\"arena-card-badges\">${badges.map(b => `<span class=\\\"arena-card-badge\\\">${b}</span>`).join('')}</div>` : ''}
     `;
     
     // Adicionar animação de entrada
@@ -1131,6 +1445,47 @@ function createCardElement(card) {
     return cardElement;
 }
 
+// =============================================
+// CATÁLOGO DE CARTAS (MARVEL / DC)
+// =============================================
+
+/**
+ * Renderiza os catálogos dos universos Marvel e DC
+ */
+function renderUniverseCatalogs() {
+    if (!elements.marvelCards || !elements.dcCards) {
+        console.warn('Contêineres de catálogos não encontrados');
+        return;
+    }
+
+    const all = typeof getAllCharacters === 'function' ? getAllCharacters() : [];
+    const marvel = all.filter(c => c.universe === 'marvel');
+    const dc = all.filter(c => c.universe === 'dc');
+
+    renderCardsToContainer(marvel, elements.marvelCards);
+    renderCardsToContainer(dc, elements.dcCards);
+}
+
+/**
+ * Renderiza uma lista de cartas em um container
+ */
+function renderCardsToContainer(cards, container) {
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Ordenar por poder total para visual mais interessante
+    const sorted = [...cards].sort((a, b) => {
+        return (calculateCardPower(b) || 0) - (calculateCardPower(a) || 0);
+    });
+
+    sorted.forEach(card => {
+        const el = createCardElement(card);
+        // Garantir que não seja tratada como carta da mão
+        el.classList.remove('hand-card', 'playable', 'selected');
+        container.appendChild(el);
+    });
+}
+
 /**
  * Atualiza controles do jogo
  */
@@ -1174,7 +1529,9 @@ function endTurn() {
         // Passar turno sem jogar
         gameState.currentPlayer = 'opponent';
         updateGameDisplay();
-        opponentPlay();
+            if (!isMultiplayerMode()) {
+                opponentPlay();
+            }
     }
 }
 
@@ -1194,6 +1551,16 @@ function endGame() {
     // Calcular resultado
     const result = calculateGameResult();
     const { playerWins, opponentWins } = result;
+    
+    // 📡 Multiplayer: enviar ação de fim de jogo para o outro cliente
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        if (code && window.Multiplayer && Multiplayer.sendAction) {
+            Multiplayer.sendAction(code, { type: 'end_game', result }).catch(err => {
+                console.warn('Falha ao enviar ação end_game:', err);
+            });
+        }
+    }
     
     // 🔥 Atualizar estatísticas E obter info sobre mudança de dificuldade
     const { difficultyChanged, oldDifficulty } = updateGameStats(result);
@@ -1433,6 +1800,44 @@ function showFinalResult(message, resultClass, result) {
  */
 function resetGame() {
     console.log('🔄 Reiniciando jogo...');
+    // Em multiplayer, o host deve definir a nova seed na sala; convidados aguardam
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        const role = getURLParam('role');
+        const uid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+        if (code && window.Multiplayer && Multiplayer.getRoomOnce) {
+            Multiplayer.getRoomOnce(code).then(room => {
+                if (!room) {
+                    showTemporaryMessage('Sala não encontrada. Mantendo estado atual.');
+                    return;
+                }
+                const isHost = role ? role === 'host' : (room.hostId && uid && room.hostId === uid);
+                if (isHost) {
+                    const newSeed = Math.floor(Math.random() * 1e9);
+                    console.log('🧩 Host gerando nova seed para próxima partida:', newSeed);
+                    Multiplayer.updateGameState(code, { gameSeed: newSeed, turn: 1, currentPlayer: room.hostId || uid, status: 'playing' })
+                      .then(() => {
+                          gameState.multiplayerSeed = newSeed;
+                          restartMultiplayerWithSeed(newSeed);
+                      })
+                      .catch(err => {
+                          console.error('Erro ao atualizar seed da sala:', err);
+                          // fallback: reiniciar com seed derivada do código
+                          const fallbackSeed = hashString(code);
+                          gameState.multiplayerSeed = fallbackSeed;
+                          restartMultiplayerWithSeed(fallbackSeed);
+                      });
+                } else {
+                    showTemporaryMessage('Aguardando o host iniciar nova partida...');
+                    // Não reinicia localmente com seed própria; aguarda update da sala
+                }
+            }).catch(err => {
+                console.error('Erro ao obter dados da sala:', err);
+                showTemporaryMessage('Falha ao acessar sala. Tente novamente.');
+            });
+            return; // Evita fluxo padrão de single-player
+        }
+    }
     
     // Esconder mensagem temporária
     hideTemporaryMessage();
@@ -1478,6 +1883,50 @@ function resetGame() {
     updateGameDisplay();
     
     console.log('✅ Jogo reiniciado! Novas arenas selecionadas.');
+}
+
+// 🔁 Reinicia partida em modo multiplayer usando uma seed específica (sincroniza arenas entre jogadores)
+function restartMultiplayerWithSeed(seed) {
+    console.log('🔁 Reiniciando multiplayer com seed:', seed);
+    hideTemporaryMessage();
+
+    const finalResult = document.getElementById('final-battle-result');
+    if (finalResult) {
+        finalResult.remove();
+    }
+
+    // Resetar estado do jogo
+    gameState.turn = 1;
+    gameState.currentPlayer = 'player';
+    gameState.gameEnded = false;
+    gameState.selectedCardId = null;
+
+    // Limpar cartas
+    gameState.playerHand = [];
+    gameState.opponentHand = [];
+    gameState.playerDeck = [];
+    gameState.opponentDeck = [];
+
+    // Limpar arenas
+    for (let i = 1; i <= 3; i++) {
+        gameState.arenas[i] = {
+            player: [],
+            opponent: [],
+            playerPower: 0,
+            opponentPower: 0,
+            arena: null
+        };
+    }
+
+    // Seed sincronizada e buff neutro em multiplayer
+    gameState.multiplayerSeed = seed;
+    gameState.opponentBuff = 0;
+
+    setupArenas(seed);
+    createDecks();
+    dealInitialHands();
+    updateGameDisplay();
+    console.log('✅ Multiplayer reiniciado com seed sincronizada:', seed);
 }
 
 /**

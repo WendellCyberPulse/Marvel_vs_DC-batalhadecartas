@@ -641,6 +641,39 @@ button:disabled {
     z-index: 10;
 }
 
+/* Badge de poder na carta da arena */
+.arena-card-power-badge {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    background: rgba(0, 0, 0, 0.8);
+    color: var(--gold);
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    z-index: 5;
+    border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+/* Badges de bônus aplicados (arena, IA) */
+.arena-card-badges {
+    margin-top: 6px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.arena-card-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
 /* Mão do Jogador */
 .hand-container {
     background: rgba(0, 0, 0, 0.4);
@@ -729,6 +762,11 @@ button:disabled {
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.3s ease;
+}
+
+/* Exibir modal quando ativo */
+.modal.show {
+    display: flex;
 }
 
 .modal-content {

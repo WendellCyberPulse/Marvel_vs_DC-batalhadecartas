@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marvel vs DC - Multiplayer</title>
+  <link rel="icon" href="imgs/super-heroi.png" type="image/x-icon" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header role="banner">
+    <h1>MARVEL vs DC</h1>
+    <p class="subtitle">Multiplayer Online</p>
+  </header>
+
+  <main class="game-container" role="main">
+    <section class="game-info" aria-label="Lobby Multiplayer">
+      <div class="game-stats">
+        <div class="score">Lobby</div>
+        <div class="turn-counter">Use um código de sala para conectar</div>
+      </div>
+      <div class="controls">
+        <button onclick="window.location.href='index.html'">Voltar ao Single Player</button>
+      </div>
+    </section>
+
+    <section aria-label="Configuração de Sala" style="max-width:640px;margin:0 auto">
+      <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px; border: 1px solid rgba(255,255,255,0.2)">
+        <div style="margin-bottom:12px">
+          <label for="mp-username">Nome de usuário:</label>
+          <input id="mp-username" type="text" placeholder="Seu nome" style="width:100%; padding:8px; margin-top:6px">
+        </div>
+        <div style="margin-bottom:12px">
+          <label for="mp-room-code">Código da sala:</label>
+          <input id="mp-room-code" type="text" placeholder="ABC123" style="width:100%; padding:8px; margin-top:6px">
+        </div>
+        <div id="mp-generated-code" style="text-align:center; margin:10px 0; font-weight:bold"></div>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+          <button id="mp-generate" class="modal-btn">Gerar Código</button>
+          <button id="mp-join" class="modal-btn">Entrar na Sala</button>
+          <button id="mp-ready" class="modal-btn new-game-btn">Estou Pronto</button>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Status da Sala" style="max-width:640px;margin:20px auto">
+      <div id="mp-status" class="battle-result" role="alert" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer role="contentinfo">
+    <p>Use o código para jogar com um amigo online</p>
+  </footer>
+
+  <!-- Firebase SDK (Web) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="Scripts/multiplayer.js"></script>
+  <script>
+    // Config do seu app Firebase (Web SDK)
+    const firebaseConfig = {
+      apiKey: "AIzaSyAUti2xRHHwP47Ip6CS3Ssy-ZAMhx2Cdu4",
+      authDomain: "projetct-cardgame.firebaseapp.com",
+      projectId: "projetct-cardgame",
+      storageBucket: "projetct-cardgame.firebasestorage.app",
+      messagingSenderId: "851010586568",
+      appId: "1:851010586568:web:3d14b8098973645d8ca2fd",
+      measurementId: "G-5FCTR456QG"
+    };
+
+    // Inicializa Firebase para multiplayer
+    if (window.Multiplayer) {
+      Multiplayer.initFirebase(firebaseConfig);
+    }
+
+    // Handlers de lobby
+    const el = {
+      username: document.getElementById('mp-username'),
+      code: document.getElementById('mp-room-code'),
+      generate: document.getElementById('mp-generate'),
+      join: document.getElementById('mp-join'),
+      ready: document.getElementById('mp-ready'),
+      status: document.getElementById('mp-status'),
+      codeOut: document.getElementById('mp-generated-code')
+    };
+
+    function setStatus(text, cls = '') {
+      el.status.textContent = text;
+      el.status.className = `battle-result ${cls}`;
+    }
+
+  function onRoomUpdate(roomData) {
+      if (!roomData) return;
+      const { status, players, code, hostId } = roomData;
+      const names = players ? Object.values(players).map(p => `${p.username}${p.ready ? ' ✅' : ''}`).join(' vs ') : '';
+      setStatus(`Sala ${code} | Status: ${status} | Jogadores: ${names}`);
+      if (status === 'playing') {
+        try {
+          const myUid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+          const role = (myUid && hostId && myUid === hostId) ? 'host' : 'guest';
+          const target = `multiplayer_game.html?mode=mp&code=${encodeURIComponent(code)}&role=${encodeURIComponent(role)}`;
+          setStatus('Partida iniciada! Redirecionando para o jogo...', 'victory');
+          window.location.href = target;
+        } catch (e) {
+          console.error('Falha ao redirecionar para jogo multiplayer:', e);
+        }
+      }
+    }
+
+    el.generate.addEventListener('click', async () => {
+      const username = (el.username.value || '').trim();
+      if (!username) { setStatus('Informe seu nome para gerar a sala', 'draw'); return; }
+      try {
+        const result = await Multiplayer.createRoom(username);
+        const code = result.code;
+        el.code.value = code;
+        el.codeOut.textContent = `Código gerado: ${code}`;
+        setStatus('Sala criada. Compartilhe o código.', 'victory');
+        Multiplayer.listenRoom(code, onRoomUpdate);
+      } catch (e) {
+        console.error(e);
+        setStatus('Erro ao criar sala. Verifique o Firebase.', 'defeat');
+      }
+    });
+
+    el.join.addEventListener('click', async () => {
+      const username = (el.username.value || '').trim();
+      const code = (el.code.value || '').trim().toUpperCase();
+      if (!username || !code) { setStatus('Informe nome e código', 'draw'); return; }
+      try {
+        await Multiplayer.joinRoom(code, username);
+        el.codeOut.textContent = `Conectado à sala ${code}`;
+        setStatus('Entrou na sala. Aguarde o outro jogador.', 'victory');
+        Multiplayer.listenRoom(code, onRoomUpdate);
+      } catch (e) {
+        console.error(e);
+        setStatus('Não foi possível entrar na sala.', 'defeat');
+      }
+    });
+
+    el.ready.addEventListener('click', async () => {
+      const code = (el.code.value || '').trim().toUpperCase();
+      if (!code) { setStatus('Nenhuma sala selecionada.', 'draw'); return; }
+      try {
+        await Multiplayer.setReady(code, true);
+        Multiplayer.startIfBothReady && Multiplayer.startIfBothReady(code);
+        setStatus('Você está pronto! Aguarde o outro jogador.', 'victory');
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  </script>
+</body>
+</html>
