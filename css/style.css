@@ -398,6 +398,59 @@ button:disabled {
     padding: 12px;
 }
 
+/* Estilo dourado para cartas raras (painel de atributos) */
+.card.rare .card-stats {
+    background: linear-gradient(135deg, #5a4a1b 0%, #d4af37 25%, #fff4b1 45%, #d4af37 65%, #8d6f1a 100%);
+    border-top: 1px solid rgba(255, 215, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 6px rgba(0,0,0,0.35);
+}
+.card.rare .stat-name {
+    color: #4a3b0a;
+}
+.card.rare .stat-value {
+    color: #1a1a1a;
+}
+
+/* Brilho animado sobre o dourado (mão) */
+.card.rare .card-stats::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    background: linear-gradient(120deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.18) 15%,
+        rgba(255,255,255,0) 30%,
+        rgba(255,255,255,0.15) 60%,
+        rgba(255,255,255,0) 100%
+    );
+    animation: goldShineSweep 3.6s linear infinite;
+}
+
+/* Barra de brilho diagonal mais evidente (mão) */
+.card.rare .card-stats::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 60%;
+    height: 100%;
+    pointer-events: none;
+    background: linear-gradient(120deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.45) 50%,
+        rgba(255,255,255,0) 100%
+    );
+    transform: skewX(-22deg);
+    animation: goldSweepBar 4.2s ease-in-out infinite;
+}
+
 .stat {
     display: flex;
     justify-content: space-between;
@@ -421,6 +474,30 @@ button:disabled {
     background: rgba(255, 255, 255, 0.05);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     font-size: 0.8rem;
+}
+
+/* Atributos dourados para cartas raras */
+.card.rare .card-attributes {
+    background: linear-gradient(135deg, #5a4a1b 0%, #d4af37 25%, #fff4b1 45%, #d4af37 65%, #8d6f1a 100%);
+    border-top: 1px solid rgba(255, 215, 0, 0.45);
+    position: relative;
+    overflow: hidden;
+}
+.card.rare .card-attributes::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    background: linear-gradient(135deg, #5a4a1b 0%, #d4af37 25%, #fff4b1 45%, #d4af37 65%, #8d6f1a 100%);
+    border-top: 1px solid rgba(255, 215, 0, 0.45);
+    animation: goldShineSweep 3.6s linear infinite;
+}
+.card.rare .attribute-tag {
+    border: 1px solid rgba(255, 215, 0, 0.35);
 }
 
 .attribute-tag {
@@ -1673,6 +1750,73 @@ footer {
     color: #fff;
     font-weight: bold;
     font-size: 0.6rem;
+}
+
+/* Estilo dourado para cartas raras na arena (painel de atributos) */
+.arena-card.rare .arena-card-stats {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.95), rgba(255, 140, 0, 0.9));
+    position: relative;
+    overflow: hidden;
+}
+.arena-card.rare .arena-card-stat-name {
+    color: #3b2f06;
+}
+.arena-card.rare .arena-card-stat-value {
+    color: #111;
+}
+
+/* Brilho animado sobre o dourado (arena) */
+.arena-card.rare .arena-card-stats::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    background: linear-gradient(120deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.2) 20%,
+        rgba(255,255,255,0) 40%,
+        rgba(255,255,255,0.16) 70%,
+        rgba(255,255,255,0) 100%
+    );
+    animation: goldShineSweep 3.6s linear infinite;
+}
+
+/* Barra de brilho diagonal mais evidente (arena) */
+.arena-card.rare .arena-card-stats::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 60%;
+    height: 100%;
+    pointer-events: none;
+    background: linear-gradient(120deg,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.45) 50%,
+        rgba(255,255,255,0) 100%
+    );
+    transform: skewX(-22deg);
+    animation: goldSweepBar 4.2s ease-in-out infinite;
+}
+
+/* Keyframes para o brilho varrer o painel dourado */
+@keyframes goldShineSweep {
+    0% { transform: translateX(-25%) translateY(-10%); }
+    50% { transform: translateX(0%) translateY(0%); }
+    100% { transform: translateX(25%) translateY(10%); }
+}
+
+/* Keyframes da barra de brilho */
+@keyframes goldSweepBar {
+    0% { left: -120%; opacity: 0.0; }
+    20% { opacity: 0.35; }
+    50% { left: 20%; opacity: 0.45; }
+    80% { opacity: 0.25; }
+    100% { left: 140%; opacity: 0.0; }
 }
 
 .arena-card-total-power {

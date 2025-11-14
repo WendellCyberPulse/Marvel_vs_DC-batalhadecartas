@@ -1035,8 +1035,8 @@ function calculateArenaPower(arenaId, side) {
             }
         }
         
-        // 🔥 BÔNUS DE DIFICULDADE PARA OPONENTE
-        const difficultyBonus = (side === 'opponent') ? gameState.opponentBuff : 0;
+        // 🔥 BÔNUS DE DIFICULDADE PARA OPONENTE (apenas singleplayer)
+        const difficultyBonus = (side === 'opponent' && !isMultiplayerMode()) ? gameState.opponentBuff : 0;
         
         totalPower += basePower + arenaBonus + difficultyBonus;
     });
@@ -1165,6 +1165,9 @@ function createArenaCardElement(card, adjustedPower = null, badges = []) {
     cardElement.className = `arena-card ${card.universe}`;
     cardElement.dataset.id = card.id;
     cardElement.title = `${card.name} - Poder: ${calculateCardPower(card)}`;
+    if (card.rarity === 'rare') {
+        cardElement.classList.add('rare');
+    }
     
     // Calcular poder total
     const totalPower = (adjustedPower != null) ? adjustedPower : calculateCardPower(card);
@@ -1396,6 +1399,9 @@ function createCardElement(card) {
     const cardElement = document.createElement('div');
     cardElement.className = `card ${card.universe}`;
     cardElement.dataset.id = card.id;
+    if (card.rarity === 'rare') {
+        cardElement.classList.add('rare');
+    }
     
     // Construir tags de atributos
     let attributeTags = '';
@@ -1657,6 +1663,10 @@ function updateGameStats(result) {
     
     // 🔥 ATUALIZAR opponentBuff com a NOVA dificuldade
     gameState.opponentBuff = DIFFICULTY_SETTINGS[gameState.difficulty].opponentBuff;
+    // Em multiplayer, manter IA desativada visual e mecanicamente
+    if (isMultiplayerMode()) {
+        gameState.opponentBuff = 0;
+    }
     
     // Atualizar seletor de dificuldade
     if (elements.difficultySelect) {
@@ -1717,7 +1727,9 @@ function showGameResult(result, difficultyChanged = false, oldDifficulty = null)
     
     message += `\n\n🎯 Dificuldade: ${difficultyInfo.name}`;
     message += `\n📊 Total: ${gameState.totalWins}/${gameState.totalGames} vitórias`;
-    message += `\n💪 Bônus do Oponente: +${gameState.opponentBuff}`;
+    if (!isMultiplayerMode()) {
+        message += `\n💪 Bônus do Oponente: +${gameState.opponentBuff}`;
+    }
     
     // Mostrar resultado
     showFinalResult(message, resultClass, result);

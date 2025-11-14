@@ -213,13 +213,14 @@ const characters = {
         },
         {
             id: 21,
-            name: "Professor Xavier",
+            name: "Wiccano",
             universe: "marvel",
-            image: "./imgs/prof_x.jpg",
-            strength: 50,
+            image: "./imgs/wiccano.jpg",
+            strength: 95,
             intelligence: 100,
-            speed: 30,
-            durability: 60,
+            speed: 100,
+            durability: 100,
+            rarity: "rare"
         },
         {
             id: 22,
@@ -391,7 +392,8 @@ const characters = {
             strength: 90,
             intelligence: 90,
             speed: 80,
-            durability: 90
+            durability: 90,
+            rarity: "rare"
         },
         {
             id: 38,
