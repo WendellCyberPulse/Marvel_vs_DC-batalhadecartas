@@ -219,6 +219,8 @@ function initializeDOMElements() {
     elements.dcCards = document.getElementById('dc-cards');
     elements.battleResult = document.getElementById('battle-result');
     elements.arenaTitle = document.getElementById('arena-title');
+    elements.playerHost = document.getElementById('player-host');
+    elements.playerGuest = document.getElementById('player-guest');
     
     // Elementos das arenas (poderes)
     elements.arenaPowers = {
@@ -477,6 +479,24 @@ function updateMultiplayerStatusUI(roomData) {
     }
     if (elements.mpGeneratedCode) {
         elements.mpGeneratedCode.textContent = text;
+    }
+    const listElHost = elements.playerHost;
+    const listElGuest = elements.playerGuest;
+    if (listElHost && listElGuest && roomData && roomData.players) {
+        const hostId = roomData.hostId;
+        const players = roomData.players;
+        const uids = Object.keys(players);
+        const host = players[hostId] || null;
+        const otherId = uids.find(id => id !== hostId);
+        const guest = otherId ? players[otherId] : null;
+        if (host) {
+            listElHost.textContent = host.username || 'Host';
+            listElHost.className = 'player-badge ' + (host.online ? 'status-online' : 'status-offline');
+        }
+        if (guest) {
+            listElGuest.textContent = guest.username || 'Guest';
+            listElGuest.className = 'player-badge ' + (guest.online ? 'status-online' : 'status-offline');
+        }
     }
     // Se a sala mudou para 'playing', podemos fechar modal
     if (status === 'playing') {
@@ -874,9 +894,7 @@ async function playCardToArena(arenaId) {
  * Continua o jogo após jogada do jogador
  */
 function continueGameAfterPlay() {
-    // Em multiplayer, não finalize imediatamente ao atingir o último turno do jogador;
-    // aguarde a jogada do oponente e a progressão de turno sincronizada.
-    if (gameState.turn >= gameState.maxTurns && !isMultiplayerMode()) {
+    if (gameState.turn > gameState.maxTurns && !isMultiplayerMode()) {
         setTimeout(() => endGame(), 1000);
     } else {
         setTimeout(() => {

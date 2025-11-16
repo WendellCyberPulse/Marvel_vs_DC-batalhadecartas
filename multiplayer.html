@@ -117,7 +117,6 @@
         el.code.value = code;
         el.codeOut.textContent = `Código gerado: ${code}`;
         setStatus('Sala criada. Compartilhe o código.', 'victory');
-        if (window.Multiplayer && Multiplayer.startPresence) { Multiplayer.startPresence(code); }
         Multiplayer.listenRoom(code, onRoomUpdate);
       } catch (e) {
         console.error(e);
@@ -133,7 +132,6 @@
         await Multiplayer.joinRoom(code, username);
         el.codeOut.textContent = `Conectado à sala ${code}`;
         setStatus('Entrou na sala. Aguarde o outro jogador.', 'victory');
-        if (window.Multiplayer && Multiplayer.startPresence) { Multiplayer.startPresence(code); }
         Multiplayer.listenRoom(code, onRoomUpdate);
       } catch (e) {
         console.error(e);
