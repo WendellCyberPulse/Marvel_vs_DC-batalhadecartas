@@ -190,6 +190,31 @@
     });
   }
 
+  async function recordPlay(code) {
+    const user = auth && auth.currentUser ? auth.currentUser : null;
+    if (!user) return;
+    const uid = user.uid;
+    const ref = db.collection('rooms').doc(code);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return;
+      const room = snap.data();
+      const players = room.players || {};
+      const uids = Object.keys(players);
+      const plays = room.playsThisTurn || {};
+      plays[uid] = true;
+      if (uids.length === 2 && uids.every(id => plays[id] === true)) {
+        tx.update(ref, {
+          turn: (room.turn || 1) + 1,
+          playsThisTurn: {},
+          currentPlayer: room.hostId || uids[0]
+        });
+      } else {
+        tx.update(ref, { playsThisTurn: plays });
+      }
+    });
+  }
+
   // Exponho na window para integração com UI depois
   window.Multiplayer = {
     initFirebase,
@@ -203,6 +228,7 @@
     listenActions,
     updateGameState,
     sendAction,
-    getUid
+    getUid,
+    recordPlay
   };
 })();

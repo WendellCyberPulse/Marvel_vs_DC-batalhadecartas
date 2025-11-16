@@ -480,6 +480,17 @@ function updateMultiplayerStatusUI(roomData) {
     if (elements.mpGeneratedCode) {
         elements.mpGeneratedCode.textContent = text;
     }
+    // Sincronizar turno e vez com estado da sala
+    try {
+        const myUid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+        if (typeof roomData.turn === 'number') {
+            gameState.turn = roomData.turn;
+        }
+        if (roomData.currentPlayer) {
+            gameState.currentPlayer = (myUid && roomData.currentPlayer === myUid) ? 'player' : 'opponent';
+        }
+        updateGameDisplay();
+    } catch (_) {}
     const listElHost = elements.playerHost;
     const listElGuest = elements.playerGuest;
     if (listElHost && listElGuest && roomData && roomData.players) {
@@ -886,6 +897,9 @@ async function playCardToArena(arenaId) {
         try {
             if (code && window.Multiplayer && Multiplayer.sendAction) {
                 await Multiplayer.sendAction(code, { type: 'play', arenaId, card });
+                if (Multiplayer.recordPlay) {
+                    await Multiplayer.recordPlay(code);
+                }
             }
         } catch (err) {
             console.warn('Não foi possível enviar ação multiplayer:', err);
@@ -900,7 +914,11 @@ async function playCardToArena(arenaId) {
  * Continua o jogo após jogada do jogador
  */
 function continueGameAfterPlay() {
-    if (gameState.turn > gameState.maxTurns && !isMultiplayerMode()) {
+    if (isMultiplayerMode()) {
+        // Em multiplayer, o avanço de turno é dirigido pelo estado da sala
+        return;
+    }
+    if (gameState.turn > gameState.maxTurns) {
         setTimeout(() => endGame(), 1000);
     } else {
         setTimeout(() => {
@@ -929,7 +947,7 @@ function handleRemoteAction(entry) {
                 gameState.arenas[arenaId].opponent.push(card);
                 gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
                 updateArenasDisplay();
-                endOpponentTurn(); // avança turno de volta ao jogador
+                // Em multiplayer, quem avança turno é o estado da sala
             } catch (e) {
                 console.error('Falha ao aplicar ação remota:', e);
             }
