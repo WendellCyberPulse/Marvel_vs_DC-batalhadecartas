@@ -138,8 +138,7 @@
     const players = room.players || {};
     const uids = Object.keys(players);
     if (uids.length === 2 && uids.every(id => players[id].ready)) {
-      await ref.update({ status: 'playing', currentPlayer: room.hostId || uids[0], turn: 1 });
-      console.log('🚀 Partida iniciada');
+      await ref.update({ status: 'playing', currentPlayer: room.hostId || uids[0], turn: 1, maxTurns: room.maxTurns || 4, playsThisTurn: {} });
     }
   }
 
@@ -195,6 +194,7 @@
     if (!user) return;
     const uid = user.uid;
     const ref = db.collection('rooms').doc(code);
+    let shouldEnd = false;
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists) return;
@@ -209,15 +209,19 @@
       const bothPlayed = (uids.length === 2) && uids.every(id => plays[id] === true);
 
       if (bothPlayed) {
-        const prevStarter = room.currentPlayer || hostId;
-        const nextStarter = prevStarter === hostId ? (guestId || hostId) : hostId;
-        tx.update(ref, {
-          turn: (room.turn || 1) + 1,
-          playsThisTurn: {},
-          currentPlayer: nextStarter
-        });
+        const maxTurns = room.maxTurns || 4;
+        const currentTurn = room.turn || 1;
+        if (currentTurn >= maxTurns) {
+          shouldEnd = true;
+          tx.update(ref, { status: 'ended', playsThisTurn: {}, currentPlayer: null });
+        } else {
+          tx.update(ref, {
+            turn: currentTurn + 1,
+            playsThisTurn: {},
+            currentPlayer: hostId
+          });
+        }
       } else {
-        // Alterna vez para o outro jogador dentro do mesmo turno
         if (otherId) {
           tx.update(ref, { playsThisTurn: plays, currentPlayer: otherId });
         } else {
@@ -225,6 +229,17 @@
         }
       }
     });
+
+    if (shouldEnd) {
+      try {
+        const actionsRef = db.collection('rooms').doc(code).collection('actions');
+        await actionsRef.add({
+          ts: firebase.firestore.FieldValue.serverTimestamp(),
+          uid: uid,
+          action: { type: 'end_game' }
+        });
+      } catch (e) {}
+    }
   }
 
   // Exponho na window para integração com UI depois

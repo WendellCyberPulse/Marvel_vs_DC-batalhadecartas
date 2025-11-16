@@ -44,7 +44,8 @@ const gameState = {
     // Timer
     turnTime: 90,
     timeLeft: 90,
-    timerInterval: null
+    timerInterval: null,
+    resultShown: false
 };
 
 // Elementos DOM
@@ -500,16 +501,25 @@ function updateMultiplayerStatusUI(roomData) {
         const host = players[hostId] || null;
         const otherId = uids.find(id => id !== hostId);
         const guest = otherId ? players[otherId] : null;
+        const isHostTurn = roomData && roomData.currentPlayer && roomData.currentPlayer === hostId;
         if (host) {
             listElHost.textContent = host.username || 'Host';
-            listElHost.className = (host.online === false) ? 'player-badge status-offline' : 'player-badge status-online';
+            if (host.online === false) {
+                listElHost.className = 'player-badge status-offline';
+            } else {
+                listElHost.className = 'player-badge ' + (isHostTurn ? 'status-online' : 'status-offline');
+            }
         } else {
             listElHost.textContent = 'Host';
             listElHost.className = 'player-badge status-online';
         }
         if (guest) {
             listElGuest.textContent = guest.username || 'Guest';
-            listElGuest.className = (guest.online === false) ? 'player-badge status-offline' : 'player-badge status-online';
+            if (guest.online === false) {
+                listElGuest.className = 'player-badge status-offline';
+            } else {
+                listElGuest.className = 'player-badge ' + (!isHostTurn ? 'status-online' : 'status-offline');
+            }
         } else {
             listElGuest.textContent = 'Aguardando convidado';
             listElGuest.className = 'player-badge';
@@ -528,6 +538,22 @@ function updateMultiplayerStatusUI(roomData) {
             console.log('🔀 Redirecionando para tela multiplayer:', url);
             window.location.href = url;
         }
+    }
+
+    // Encerramento coordenado pela sala
+    if (roomData.status === 'ended' && !gameState.gameEnded) {
+        gameState.gameEnded = true;
+        gameState.currentPlayer = 'none';
+        setTimeout(() => {
+            if (gameState.resultShown) return;
+            try {
+                const result = calculateGameResult();
+                const { difficultyChanged, oldDifficulty } = updateGameStats(result);
+                showGameResult(result, difficultyChanged, oldDifficulty);
+                gameState.resultShown = true;
+                updateGameDisplay();
+            } catch (e) {}
+        }, 300);
     }
 }
 
@@ -936,9 +962,8 @@ function handleRemoteAction(entry) {
     if (!entry || !entry.action) return;
     const { action, uid } = entry;
     const myUid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
-    if (myUid && uid === myUid) return; // ignora ações próprias
-
     if (action.type === 'play') {
+        if (myUid && uid === myUid) return; // ignora jogadas próprias
         const arenaId = action.arenaId;
         const card = action.card;
         (async () => {
@@ -955,16 +980,18 @@ function handleRemoteAction(entry) {
     }
     
     if (action.type === 'end_game') {
-        // Exibir resultado para ambos os jogadores quando qualquer lado finalizar
-        if (gameState.gameEnded) return; // evitar duplicidade
+        if (gameState.gameEnded || gameState.resultShown) return;
         console.log('📡 Recebido end_game remoto');
         gameState.gameEnded = true;
         gameState.currentPlayer = 'none';
-        // Importante: sempre recalcular localmente para perspectiva correta
-        const result = calculateGameResult();
-        const { difficultyChanged, oldDifficulty } = updateGameStats(result);
-        showGameResult(result, difficultyChanged, oldDifficulty);
-        updateGameDisplay();
+        setTimeout(() => {
+            if (gameState.resultShown) return;
+            const result = calculateGameResult();
+            const { difficultyChanged, oldDifficulty } = updateGameStats(result);
+            showGameResult(result, difficultyChanged, oldDifficulty);
+            gameState.resultShown = true;
+            updateGameDisplay();
+        }, 300);
     }
 }
 
@@ -1344,15 +1371,14 @@ function opponentPlay() {
  * Finaliza turno do oponente
  */
 function endOpponentTurn() {
+    // Não ultrapassar maxTurns ao encerrar
+    if (gameState.turn >= gameState.maxTurns) {
+        endGame();
+        return;
+    }
     gameState.turn++;
     gameState.currentPlayer = 'player';
-    
     updateGameDisplay();
-    
-    // Verificar se o jogo acabou
-    if (gameState.turn > gameState.maxTurns) {
-        endGame();
-    }
 }
 
 // =============================================
@@ -1615,6 +1641,7 @@ function endGame() {
     
     // Mostrar resultado
     showGameResult(result, difficultyChanged, oldDifficulty);
+    gameState.resultShown = true;
     
     // Atualizar interface
     updateGameDisplay();
@@ -1906,6 +1933,7 @@ function resetGame() {
     gameState.turn = 1;
     gameState.currentPlayer = 'player';
     gameState.gameEnded = false;
+    gameState.resultShown = false;
     gameState.selectedCardId = null;
     
     // Limpar cartas
@@ -1953,6 +1981,7 @@ function restartMultiplayerWithSeed(seed) {
     gameState.turn = 1;
     gameState.currentPlayer = 'player';
     gameState.gameEnded = false;
+    gameState.resultShown = false;
     gameState.selectedCardId = null;
 
     // Limpar cartas
