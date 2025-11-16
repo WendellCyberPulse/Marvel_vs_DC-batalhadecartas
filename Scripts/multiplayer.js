@@ -8,6 +8,8 @@
   let app = null;
   let db = null;
   let auth = null;
+  let currentRoomCode = null;
+  let presenceInterval = null;
 
   // Inicializa Firebase
   // Chame initFirebase({ apiKey, authDomain, projectId, ... }) antes de usar as funções abaixo
@@ -86,6 +88,9 @@
     };
 
     await db.collection('rooms').doc(code).set(roomDoc);
+    currentRoomCode = code;
+    await markPresence(code, true);
+    startPresence(code);
     console.log('🎮 Sala criada:', code);
     return { code };
   }
@@ -116,6 +121,9 @@
     const update = {};
     update[`players.${uid}`] = { username: username || `Jogador_${code}_2`, ready: false };
     await ref.update(update);
+    currentRoomCode = code;
+    await markPresence(code, true);
+    startPresence(code);
     console.log('✅ Entrou na sala:', code);
     return { code };
   }
@@ -190,6 +198,102 @@
     });
   }
 
+  async function markPresence(code, online) {
+    try {
+      const user = auth && auth.currentUser ? auth.currentUser : null;
+      if (!user) return;
+      const uid = user.uid;
+      const ref = db.collection('rooms').doc(code);
+      const patch = {};
+      patch[`players.${uid}.online`] = !!online;
+      patch[`players.${uid}.lastSeen`] = firebase.firestore.FieldValue.serverTimestamp();
+      await ref.update(patch);
+    } catch (e) {
+      console.warn('Falha ao marcar presença:', e);
+    }
+  }
+
+  function startPresence(code) {
+    try {
+      currentRoomCode = code;
+      if (presenceInterval) clearInterval(presenceInterval);
+      presenceInterval = setInterval(() => {
+        markPresence(code, true);
+      }, 20000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          markPresence(code, false);
+          attemptCleanupRoom(code);
+        } else if (document.visibilityState === 'visible') {
+          markPresence(code, true);
+        }
+      });
+      window.addEventListener('beforeunload', () => {
+        markPresence(code, false);
+        attemptCleanupRoom(code);
+        deleteAnonymousUser();
+      });
+      window.addEventListener('pagehide', () => {
+        markPresence(code, false);
+        attemptCleanupRoom(code);
+        deleteAnonymousUser();
+      });
+    } catch (e) {
+      console.warn('Falha ao iniciar presença:', e);
+    }
+  }
+
+  async function attemptCleanupRoom(code) {
+    try {
+      const ref = db.collection('rooms').doc(code);
+      const snap = await ref.get();
+      if (!snap.exists) return;
+      const room = snap.data();
+      const players = room.players || {};
+      const list = Object.values(players);
+      if (list.length === 0) {
+        await deleteRoomAndActions(ref);
+        return;
+      }
+      const allOffline = list.every(p => p && p.online === false);
+      const lastSeenTimes = list.map(p => p && p.lastSeen && p.lastSeen.toMillis ? p.lastSeen.toMillis() : 0);
+      const now = Date.now();
+      const stale = lastSeenTimes.length > 0 && Math.max.apply(null, lastSeenTimes) < (now - 20000);
+      if (allOffline && stale) {
+        await deleteRoomAndActions(ref);
+      }
+    } catch (e) {
+      console.warn('Falha ao limpar sala:', e);
+    }
+  }
+
+  async function deleteRoomAndActions(ref) {
+    try {
+      const actionsRef = ref.collection('actions');
+      const actions = await actionsRef.get();
+      const batch = db.batch();
+      actions.forEach(doc => {
+        batch.delete(actionsRef.doc(doc.id));
+      });
+      await batch.commit().catch(() => {});
+      await ref.delete();
+      if (presenceInterval) { clearInterval(presenceInterval); presenceInterval = null; }
+      deleteAnonymousUser();
+    } catch (e) {
+      console.warn('Falha ao deletar sala/ações:', e);
+    }
+  }
+
+  async function deleteAnonymousUser() {
+    try {
+      const user = auth && auth.currentUser ? auth.currentUser : null;
+      if (!user || !user.isAnonymous) return;
+      await user.delete();
+    } catch (_) {
+      try { await auth.signOut(); } catch (_) {}
+    }
+  }
+
   // Exponho na window para integração com UI depois
   window.Multiplayer = {
     initFirebase,
@@ -203,6 +307,10 @@
     listenActions,
     updateGameState,
     sendAction,
-    getUid
+    getUid,
+    startPresence,
+    markPresence,
+    attemptCleanupRoom,
+    deleteAnonymousUser
   };
 })();

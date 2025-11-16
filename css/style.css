@@ -1177,19 +1177,63 @@ footer {
     }
     
     .arenas {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
     }
+    
+
     
     .hand-cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        justify-items: center;
+    }
+
+    .hand-cards .card {
+        min-width: auto;
+        width: 100%;
+        min-height: 280px;
+    }
+    
+    .hand-cards .card-image {
+        height: 140px;
+    }
+
+    .hand-cards .card-header {
+        font-size: 0.9rem;
+        padding: 8px;
+    }
+
+    .hand-cards .card-stats {
+        padding: 8px;
+    }
+    #marvel-cards,
+    #dc-cards {
         gap: 10px;
     }
-    
-    .hand-card {
-        transform: scale(0.9);
+    #marvel-cards .card-image img,
+    #dc-cards .card-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
-    
-    .hand-card:hover {
-        transform: scale(1.2);
+    #marvel-cards .card-header,
+    #dc-cards .card-header {
+        font-size: clamp(0.9rem, 2.5vw, 1.05rem);
+    }
+    #marvel-cards .card-stats,
+    #dc-cards .card-stats {
+        padding: 8px;
+    }
+    #marvel-cards .card-image,
+    #dc-cards .card-image {
+        height: 160px;
+    }
+    #marvel-cards .card,
+    #dc-cards .card {
+        min-height: 300px;
+        width: 100%;
     }
     
     h1 {
@@ -1224,11 +1268,26 @@ footer {
     }
     
     .cards-container {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
     }
     
     .card {
         min-width: auto;
+        min-height: 380px;
+    }
+    
+    .card-image {
+        height: 200px;
+    }
+    
+    .card-header {
+        font-size: clamp(0.95rem, 3vw, 1.05rem);
+        padding: 8px;
+    }
+    
+    .card-stats {
+        padding: 8px;
     }
     
     .controls {
@@ -1237,6 +1296,67 @@ footer {
     
     button {
         width: 100%;
+    }
+
+    .arenas {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    
+   
+
+    .hand-cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        justify-items: center;
+    }
+
+    .hand-cards .card {
+        min-width: auto;
+        width: 100%;
+        min-height: 280px;
+    }
+
+    .hand-cards .card-image {
+        height: 140px;
+    }
+
+    .hand-cards .card-header {
+        font-size: 0.9rem;
+        padding: 8px;
+    }
+
+    .hand-cards .card-stats {
+        padding: 8px;
+    }
+    #marvel-cards,
+    #dc-cards {
+        gap: 8px;
+    }
+    #marvel-cards .card-image img,
+    #dc-cards .card-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    #marvel-cards .card-header,
+    #dc-cards .card-header {
+        font-size: clamp(0.95rem, 3vw, 1.05rem);
+        padding: 8px;
+    }
+    #marvel-cards .card-stats,
+    #dc-cards .card-stats {
+        padding: 8px;
+    }
+    #marvel-cards .card,
+    #dc-cards .card {
+        min-height: 300px;
+        width: 100%;
+    }
+    #marvel-cards .card-image,
+    #dc-cards .card-image {
+        height: 160px;
     }
 }
 
@@ -1522,7 +1642,7 @@ footer {
 
 @media (max-width: 768px) {
     .arenas {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(3, 1fr);
     }
     
     .arena {
@@ -2368,4 +2488,28 @@ footer {
     box-shadow: 0 0 25px rgba(76, 175, 80, 0.8) !important;
     transform: scale(1.05);
     transition: all 0.3s ease;
+}
+    .arenas {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+
+@media (max-width: 768px) {
+    .arenas { gap: 10px; }
+    .hand-cards .card-header { font-size: clamp(0.9rem, 2.5vw, 1.05rem); }
+    .hand-cards .card-image img { width: 100%; height: 100%; object-fit: cover; }
+    .arena-effect { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+}
+
+@media (max-width: 480px) {
+    .cards-container { gap: 8px; }
+    .arenas { gap: 8px; }
+    .card-header { font-size: clamp(0.95rem, 3vw, 1.05rem); padding: 8px; }
+    .card-stats { padding: 8px; }
+    .hand-cards .card-image img { width: 100%; height: 100%; object-fit: cover; }
+    .arena-effect { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+}
+
+@media (hover: none) {
+    .hand-card:hover { transform: none; }
 }

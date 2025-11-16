@@ -159,6 +159,12 @@
         if (window.Multiplayer) {
             Multiplayer.initFirebase(firebaseConfig);
         }
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get('mode');
+        const code = params.get('code');
+        if (mode === 'mp' && code && window.Multiplayer && Multiplayer.startPresence) {
+            Multiplayer.startPresence(code);
+        }
         // Esta página deve ser acessada com query params: ?mode=mp&code=ABC123&role=host|guest
     </script>
 </body>
