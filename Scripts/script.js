@@ -491,11 +491,17 @@ function updateMultiplayerStatusUI(roomData) {
         const guest = otherId ? players[otherId] : null;
         if (host) {
             listElHost.textContent = host.username || 'Host';
-            listElHost.className = 'player-badge ' + (host.online ? 'status-online' : 'status-offline');
+            listElHost.className = (host.online === false) ? 'player-badge status-offline' : 'player-badge status-online';
+        } else {
+            listElHost.textContent = 'Host';
+            listElHost.className = 'player-badge status-online';
         }
         if (guest) {
             listElGuest.textContent = guest.username || 'Guest';
-            listElGuest.className = 'player-badge ' + (guest.online ? 'status-online' : 'status-offline');
+            listElGuest.className = (guest.online === false) ? 'player-badge status-offline' : 'player-badge status-online';
+        } else {
+            listElGuest.textContent = 'Aguardando convidado';
+            listElGuest.className = 'player-badge';
         }
     }
     // Se a sala mudou para 'playing', podemos fechar modal
