@@ -138,7 +138,7 @@
     const players = room.players || {};
     const uids = Object.keys(players);
     if (uids.length === 2 && uids.every(id => players[id].ready)) {
-      await ref.update({ status: 'playing', currentPlayer: uids[0], turn: 1 });
+      await ref.update({ status: 'playing', currentPlayer: room.hostId || uids[0], turn: 1 });
       console.log('🚀 Partida iniciada');
     }
   }
@@ -200,16 +200,17 @@
       if (!snap.exists) return;
       const room = snap.data();
       const players = room.players || {};
-      const host = room.hostId;
+      const hostId = room.hostId;
       const uids = Object.keys(players);
-      const otherId = uids.find(id => id !== uid);
+      const guestId = uids.find(id => id !== hostId);
+      const otherId = uid === hostId ? guestId : hostId;
       const plays = room.playsThisTurn || {};
       plays[uid] = true;
       const bothPlayed = (uids.length === 2) && uids.every(id => plays[id] === true);
 
       if (bothPlayed) {
-        const prevStarter = room.currentPlayer || host || uids[0];
-        const nextStarter = (prevStarter === uids[0]) ? (uids[1] || uids[0]) : uids[0];
+        const prevStarter = room.currentPlayer || hostId;
+        const nextStarter = prevStarter === hostId ? (guestId || hostId) : hostId;
         tx.update(ref, {
           turn: (room.turn || 1) + 1,
           playsThisTurn: {},
