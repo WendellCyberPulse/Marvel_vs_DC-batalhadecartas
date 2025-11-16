@@ -6,7 +6,7 @@ admin.initializeApp();
 exports.cleanupRooms = functions.pubsub.schedule('every 1 minutes').onRun(async () => {
   const db = admin.firestore();
   const now = Date.now();
-  const threshold = 20000;
+  const threshold = 120000; // 2 minutos para evitar apagar salas ativas
   const roomsSnap = await db.collection('rooms').get();
   const activeUids = new Set();
   const deletions = [];
@@ -20,7 +20,7 @@ exports.cleanupRooms = functions.pubsub.schedule('every 1 minutes').onRun(async 
     const allOffline = list.length > 0 && list.every(p => p.online === false);
     const lastSeenMs = list.map(p => (p.lastSeen && p.lastSeen.toMillis) ? p.lastSeen.toMillis() : 0);
     const stale = lastSeenMs.length > 0 && Math.max(...lastSeenMs) < (now - threshold);
-    if (allOffline && stale) {
+    if (room.status !== 'playing' && allOffline && stale) {
       deletions.push((async () => {
         const actionsSnap = await doc.ref.collection('actions').get();
         const batch = db.batch();

@@ -249,6 +249,7 @@
       const snap = await ref.get();
       if (!snap.exists) return;
       const room = snap.data();
+      if (room.status === 'playing') return;
       const players = room.players || {};
       const list = Object.values(players);
       if (list.length === 0) {
