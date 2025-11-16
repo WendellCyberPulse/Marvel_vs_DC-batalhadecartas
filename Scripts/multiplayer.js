@@ -200,17 +200,28 @@
       if (!snap.exists) return;
       const room = snap.data();
       const players = room.players || {};
+      const host = room.hostId;
       const uids = Object.keys(players);
+      const otherId = uids.find(id => id !== uid);
       const plays = room.playsThisTurn || {};
       plays[uid] = true;
-      if (uids.length === 2 && uids.every(id => plays[id] === true)) {
+      const bothPlayed = (uids.length === 2) && uids.every(id => plays[id] === true);
+
+      if (bothPlayed) {
+        const prevStarter = room.currentPlayer || host || uids[0];
+        const nextStarter = (prevStarter === uids[0]) ? (uids[1] || uids[0]) : uids[0];
         tx.update(ref, {
           turn: (room.turn || 1) + 1,
           playsThisTurn: {},
-          currentPlayer: room.hostId || uids[0]
+          currentPlayer: nextStarter
         });
       } else {
-        tx.update(ref, { playsThisTurn: plays });
+        // Alterna vez para o outro jogador dentro do mesmo turno
+        if (otherId) {
+          tx.update(ref, { playsThisTurn: plays, currentPlayer: otherId });
+        } else {
+          tx.update(ref, { playsThisTurn: plays });
+        }
       }
     });
   }
