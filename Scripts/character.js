@@ -607,6 +607,7 @@ const characters = {
             intelligence: 85,
             speed: 100,
             durability: 100,
+            gender: "female",
         },
         {
             id: 58,
@@ -676,3 +677,4 @@ function shuffleArray(array) {
 }
 
 console.log('✅ Characters.js totalmente carregado');
+
