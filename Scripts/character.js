@@ -754,6 +754,7 @@ const characters = {
             intelligence: 85,
             speed: 100,
             durability: 100,
+            gender: "female",
             ability: {
                 id: 'conditional_maximize',
                 name: 'Maximização Condicional',
@@ -831,3 +832,4 @@ function shuffleArray(array) {
 }
 
 console.log('✅ Characters.js totalmente carregado');
+
