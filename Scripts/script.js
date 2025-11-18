@@ -2102,6 +2102,172 @@ function opponentPlay() {
             gameState.opponentHand.splice(randomCardIndex, 1);
             gameState.arenas[arenaId].opponent.push(card);
             gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+
+            if (card && card.ability && card.ability.trigger === 'onPlay' && !card.ability.used) {
+                if (card.ability.effect === 'steal') {
+                    const pool = gameState.arenas[arenaId].player;
+                    if (pool && pool.length > 0) {
+                        const idx = Math.floor(Math.random() * pool.length);
+                        const stolen = pool.splice(idx, 1)[0];
+                        gameState.arenas[arenaId].opponent.push(stolen);
+                        gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                        gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'morph_to_strongest') {
+                    const arr = gameState.arenas[arenaId].player;
+                    if (arr && arr.length > 0) {
+                        let bestIdx = 0;
+                        let bestVal = -Infinity;
+                        const hasHackOpponent = (gameState.arenas[arenaId].opponent || []).some(c => c && c.ability && c.ability.id === 'hack');
+                        for (let i = 0; i < arr.length; i++) {
+                            const pc = arr[i];
+                            const base = calculateCardPower(pc);
+                            const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                                ? applyArenaEffect(pc, gameState.arenas[arenaId].arena, 'player')
+                                : 0;
+                            let val = base + arenaBonus;
+                            if (hasHackOpponent) val = Math.floor(val * 0.9);
+                            if (val > bestVal) { bestVal = val; bestIdx = i; }
+                        }
+                        const target = arr[bestIdx];
+                        card.strength = target.strength || 0;
+                        card.intelligence = target.intelligence || 0;
+                        card.speed = target.speed || 0;
+                        card.durability = target.durability || 0;
+                        gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'change_arena') {
+                    const all = (typeof arenas !== 'undefined')
+                        ? [...arenas.marvel, ...arenas.dc, ...arenas.neutral]
+                        : [];
+                    if (all.length > 0) {
+                        const current = gameState.arenas[arenaId].arena;
+                        let idx = Math.floor(Math.random() * all.length);
+                        let newArena = all[idx];
+                        if (current && newArena && newArena.name === current.name) {
+                            newArena = all[(idx + 1) % all.length];
+                        }
+                        gameState.arenas[arenaId].arena = newArena;
+                        gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                        gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'change_all_arenas') {
+                    let picked = [];
+                    if (typeof selectRandomArenas === 'function') {
+                        picked = selectRandomArenas();
+                    }
+                    if (picked && picked.length >= 3) {
+                        for (let i = 1; i <= 3; i++) {
+                            gameState.arenas[i].arena = picked[i - 1];
+                            gameState.arenas[i].playerPower = calculateArenaPower(i, 'player');
+                            gameState.arenas[i].opponentPower = calculateArenaPower(i, 'opponent');
+                        }
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'max_allies') {
+                    for (let i = 1; i <= 3; i++) {
+                        const arr = gameState.arenas[i].opponent;
+                        for (let idx = 0; idx < arr.length; idx++) {
+                            const c = arr[idx];
+                            if (!c) continue;
+                            c.strength = 100;
+                            c.intelligence = 100;
+                            c.speed = 100;
+                            c.durability = 100;
+                        }
+                        gameState.arenas[i].opponentPower = calculateArenaPower(i, 'opponent');
+                    }
+                    updateArenasDisplay();
+                    card.ability.used = true;
+                }
+                if (card.ability.effect === 'smash_strongest') {
+                    const arr = gameState.arenas[arenaId].player;
+                    if (arr && arr.length > 0) {
+                        let bestIdx = 0;
+                        let bestVal = -Infinity;
+                        const hasHackOpponent = (gameState.arenas[arenaId].opponent || []).some(c => c && c.ability && c.ability.id === 'hack');
+                        for (let i = 0; i < arr.length; i++) {
+                            const pc = arr[i];
+                            const base = calculateCardPower(pc);
+                            const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                                ? applyArenaEffect(pc, gameState.arenas[arenaId].arena, 'player')
+                                : 0;
+                            let val = base + arenaBonus;
+                            if (hasHackOpponent) val = Math.floor(val * 0.9);
+                            if (val > bestVal) { bestVal = val; bestIdx = i; }
+                        }
+                        gameState.arenas[arenaId].player.splice(bestIdx, 1);
+                        gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'destroy_arena') {
+                    const arr = gameState.arenas[arenaId].player;
+                    if (arr && arr.length > 0) {
+                        arr.splice(0, arr.length);
+                        gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'duplicate_all_arenas') {
+                    const targets = [1, 2, 3].filter(i => i !== arenaId);
+                    for (const t of targets) {
+                        const dup = { ...card };
+                        dup.id = `${card.id}_dup_${t}_${Math.random().toString(36).slice(2)}`;
+                        if (dup.ability) dup.ability = { ...dup.ability, used: true };
+                        gameState.arenas[t].opponent.push(dup);
+                        gameState.arenas[t].opponentPower = calculateArenaPower(t, 'opponent');
+                    }
+                    updateArenasDisplay();
+                    card.ability.used = true;
+                }
+                if (card.ability.effect === 'maximize_if_lower') {
+                    const arr = gameState.arenas[arenaId].player;
+                    let oppMax = 0;
+                    if (arr && arr.length > 0) {
+                        const hasHackOpponent = (gameState.arenas[arenaId].opponent || []).some(c => c && c.ability && c.ability.id === 'hack');
+                        for (let i = 0; i < arr.length; i++) {
+                            const pc = arr[i];
+                            const base = calculateCardPower(pc);
+                            const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                                ? applyArenaEffect(pc, gameState.arenas[arenaId].arena, 'player')
+                                : 0;
+                            let val = base + arenaBonus;
+                            if (hasHackOpponent) val = Math.floor(val * 0.9);
+                            if (val > oppMax) oppMax = val;
+                        }
+                    }
+                    const hasHackPlayer = (gameState.arenas[arenaId].player || []).some(c => c && c.ability && c.ability.id === 'hack');
+                    const myBase = calculateCardPower(card);
+                    const myArenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                        ? applyArenaEffect(card, gameState.arenas[arenaId].arena, 'opponent')
+                        : 0;
+                    let myVal = myBase + myArenaBonus + (!isMultiplayerMode() ? (gameState.opponentBuff || 0) : 0);
+                    if (hasHackPlayer) myVal = Math.floor(myVal * 0.9);
+                    if (myVal < oppMax) {
+                        card.strength = 100;
+                        card.intelligence = 100;
+                        card.speed = 100;
+                        card.durability = 100;
+                        card.ability.used = true;
+                        gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                        updateArenasDisplay();
+                    }
+                }
+            }
             
             // Comprar nova carta se disponível
             if (gameState.opponentDeck.length > 0) {
