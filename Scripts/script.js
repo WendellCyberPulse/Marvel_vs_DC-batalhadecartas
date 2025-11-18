@@ -24,6 +24,20 @@ const gameState = {
     opponentHand: [],
     playerDeck: [],
     opponentDeck: [],
+    // Simulação determinística da mão/deck do oponente (multiplayer)
+    simOpponentHand: [],
+    simOpponentDeck: [],
+    clientId: Math.random().toString(36).slice(2) + Date.now(),
+    // Delay de alternância de vez (multiplayer)
+    turnChangeTimeoutId: null,
+    turnChangeIntervalId: null,
+    turnChangeCountdown: 0,
+    roomCurrentPlayerId: null,
+    pendingNextCurrent: null,
+    turnChangeLock: false,
+    // Última ação de sala processada
+    lastActionIdProcessed: null,
+    processedActionIds: [],
     selectedCardId: null,
     
     // Arenas
@@ -454,6 +468,48 @@ function getURLParam(key) {
     return params.get(key);
 }
 
+// Remove valores undefined de objetos/arrays para compatibilidade com Firestore
+function sanitizeForFirestore(value) {
+    if (value === undefined) return null;
+    if (value === null) return null;
+    if (Array.isArray(value)) {
+        return value.map(sanitizeForFirestore);
+    }
+    if (typeof value === 'object') {
+        const out = {};
+        for (const k in value) {
+            const v = value[k];
+            if (v === undefined) continue;
+            const sv = sanitizeForFirestore(v);
+            out[k] = sv;
+        }
+        return out;
+    }
+    return value;
+}
+
+// Inicia contador visual de 5s para alternância de vez em multiplayer
+function startTurnChangeCountdown() {
+    if (!isMultiplayerMode()) return;
+    if (gameState.turnChangeTimeoutId) {
+        clearTimeout(gameState.turnChangeTimeoutId);
+        gameState.turnChangeTimeoutId = null;
+    }
+    if (gameState.turnChangeIntervalId) {
+        clearInterval(gameState.turnChangeIntervalId);
+        gameState.turnChangeIntervalId = null;
+    }
+    gameState.turnChangeCountdown = 5;
+    gameState.turnChangeIntervalId = setInterval(() => {
+        gameState.turnChangeCountdown = Math.max(0, gameState.turnChangeCountdown - 1);
+        updateGameDisplay();
+        if (gameState.turnChangeCountdown === 0) {
+            clearInterval(gameState.turnChangeIntervalId);
+            gameState.turnChangeIntervalId = null;
+        }
+    }, 1000);
+}
+
 function isMultiplayerMode() {
     const mode = getURLParam('mode');
     return mode === 'mp';
@@ -487,8 +543,90 @@ function updateMultiplayerStatusUI(roomData) {
         if (typeof roomData.turn === 'number') {
             gameState.turn = roomData.turn;
         }
+        // Força mapeamento inicial por role no turno 1
+        if (roomData.status === 'playing' && roomData.turn === 1) {
+            const role = getURLParam('role');
+            const hostId = roomData.hostId;
+            const starterId = roomData.currentPlayer || hostId;
+            let nextCurrent;
+            if (role === 'host') {
+                nextCurrent = (starterId === hostId) ? 'player' : 'opponent';
+            } else if (role === 'guest') {
+                nextCurrent = (starterId === hostId) ? 'opponent' : 'player';
+            } else {
+                nextCurrent = (starterId === hostId) ? 'player' : 'opponent';
+            }
+            gameState.currentPlayer = nextCurrent;
+            gameState.roomCurrentPlayerId = starterId;
+            updateGameDisplay();
+        }
+        // Processar última ação espelhada no doc da sala (fallback)
+        if (roomData.lastAction && roomData.lastAction.id && roomData.lastAction.id !== gameState.lastActionIdProcessed) {
+            try {
+                gameState.lastActionIdProcessed = roomData.lastAction.id;
+                handleRemoteAction({ action: roomData.lastAction, uid: null, id: roomData.lastAction.id });
+            } catch (e) {
+                console.warn('Falha ao processar lastAction da sala:', e);
+            }
+        }
+        // Tratativa inicial ao entrar/reiniciar: definir vez sem depender de UID
+        if (!gameState.roomCurrentPlayerId && roomData.status === 'playing' && roomData.currentPlayer) {
+            const role = getURLParam('role');
+            const hostId = roomData.hostId;
+            const starterId = roomData.currentPlayer;
+            let nextCurrent;
+            if (role === 'host') {
+                nextCurrent = (starterId === hostId) ? 'player' : 'opponent';
+            } else if (role === 'guest') {
+                nextCurrent = (starterId === hostId) ? 'opponent' : 'player';
+            } else {
+                // Sem role, usar mapeamento pelo hostId
+                nextCurrent = (starterId === hostId) ? 'player' : 'opponent';
+            }
+            if (nextCurrent) {
+                gameState.currentPlayer = nextCurrent;
+                gameState.roomCurrentPlayerId = starterId;
+                updateGameDisplay();
+            }
+        }
+
         if (roomData.currentPlayer) {
-            gameState.currentPlayer = (myUid && roomData.currentPlayer === myUid) ? 'player' : 'opponent';
+            const prevRoomId = gameState.roomCurrentPlayerId;
+            const newRoomId = roomData.currentPlayer;
+            const hostId = roomData.hostId;
+            const role = getURLParam('role');
+            if (newRoomId !== prevRoomId) {
+                gameState.roomCurrentPlayerId = newRoomId;
+                let nextCurrent;
+                const isHostTurn = newRoomId === hostId;
+                if (role === 'host') {
+                    nextCurrent = isHostTurn ? 'player' : 'opponent';
+                } else if (role === 'guest') {
+                    nextCurrent = isHostTurn ? 'opponent' : 'player';
+                } else {
+                    nextCurrent = isHostTurn ? 'player' : 'opponent';
+                }
+                gameState.currentPlayer = nextCurrent;
+                // Bloqueia ações por 5s para dar tempo de efeitos/animações
+                gameState.turnChangeLock = true;
+                if (gameState.turnChangeTimeoutId) { clearTimeout(gameState.turnChangeTimeoutId); }
+                if (gameState.turnChangeIntervalId) { clearInterval(gameState.turnChangeIntervalId); }
+                gameState.turnChangeCountdown = 5;
+                gameState.turnChangeIntervalId = setInterval(() => {
+                    gameState.turnChangeCountdown = Math.max(0, gameState.turnChangeCountdown - 1);
+                    updateGameDisplay();
+                    if (gameState.turnChangeCountdown === 0) {
+                        clearInterval(gameState.turnChangeIntervalId);
+                        gameState.turnChangeIntervalId = null;
+                    }
+                }, 1000);
+                gameState.turnChangeTimeoutId = setTimeout(() => {
+                    gameState.turnChangeCountdown = 0;
+                    gameState.turnChangeLock = false;
+                    updateGameDisplay();
+                    gameState.turnChangeTimeoutId = null;
+                }, 5000);
+            }
         }
         updateGameDisplay();
     } catch (_) {}
@@ -528,9 +666,9 @@ function updateMultiplayerStatusUI(roomData) {
     // Se a sala mudou para 'playing', podemos fechar modal
     if (status === 'playing') {
         hideMultiplayerModal();
-        showTemporaryMessage('Partida iniciada!');
-        // Redireciona para a tela de jogo multiplayer se estiver no lobby (multiplayer.html)
+        // Mostrar mensagem de partida iniciada apenas no lobby, não durante o jogo
         if (!isMultiplayerMode()) {
+            showTemporaryMessage('Partida iniciada!');
             const code = (elements.mpRoomCode?.value || '').trim().toUpperCase() || roomData.code;
             const uid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
             const role = roomData.hostId && uid && roomData.hostId === uid ? 'host' : 'guest';
@@ -741,7 +879,7 @@ function setTimerForGameEnd() {
 /**
  * Chamado quando o tempo acaba
  */
-function timeUp() {
+async function timeUp() {
     console.log('⏰ Tempo esgotado!');
     
     if (gameState.currentPlayer === 'player' && !gameState.gameEnded) {
@@ -751,8 +889,30 @@ function timeUp() {
         // Mensagem para o jogador
         showTemporaryMessage('⏰ Tempo esgotado! Turno do oponente.');
         
-        // Passar turno para oponente
-        gameState.currentPlayer = 'opponent';
+        // Em multiplayer, não altera localmente; envia PASS para sala
+        if (isMultiplayerMode()) {
+            const code = getURLParam('code');
+            try {
+                if (code && window.Multiplayer && Multiplayer.sendAction) {
+                    const actionId = Math.random().toString(36).slice(2) + Date.now();
+                    const actionPayload = { id: actionId, type: 'pass', clientId: gameState.clientId };
+                    const sanitized = sanitizeForFirestore(actionPayload);
+                    Multiplayer.sendAction(code, sanitized);
+                    if (window.Multiplayer && Multiplayer.updateGameState) {
+                        Multiplayer.updateGameState(code, { lastAction: sanitized });
+                    }
+                }
+                await tryAutoTeleportNightcrawler();
+                if (window.Multiplayer && Multiplayer.recordPlay && code) {
+                    Multiplayer.recordPlay(code);
+                }
+            } catch (err) {
+                console.warn('Não foi possível enviar PASS no multiplayer (timeUp):', err);
+            }
+        } else {
+            // Passar turno para oponente (singleplayer)
+            gameState.currentPlayer = 'opponent';
+        }
         
         // Atualizar display e iniciar jogada da IA
         setTimeout(() => {
@@ -774,13 +934,34 @@ function timeUp() {
  */
 function createDecks() {
     const allCharacters = getAllCharacters();
-    const shuffled = shuffleArray(allCharacters);
+    let shuffled;
+    if (isMultiplayerMode() && typeof seededRandom === 'function') {
+        const baseSeed = gameState.multiplayerSeed || 123456;
+        const rng = seededRandom(baseSeed);
+        const arr = [...allCharacters];
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        shuffled = arr;
+    } else {
+        shuffled = shuffleArray(allCharacters);
+    }
     
-    // Pegar 24 cartas aleatórias para cada deck
+    // Pegar 24 cartas determinísticas para os decks em multiplayer
     const availableCards = shuffled.slice(0, 24);
     
-    gameState.playerDeck = selectDeckForPlayer(availableCards);
-    gameState.opponentDeck = selectDeckForOpponent(availableCards);
+    if (isMultiplayerMode()) {
+        const role = getURLParam('role');
+        const playerFirst = role === 'host';
+        const firstHalf = availableCards.slice(0, 12).map(cloneCard);
+        const secondHalf = availableCards.slice(12, 24).map(cloneCard);
+        gameState.playerDeck = playerFirst ? firstHalf : secondHalf;
+        gameState.opponentDeck = playerFirst ? secondHalf : firstHalf;
+    } else {
+        gameState.playerDeck = selectDeckForPlayer(availableCards);
+        gameState.opponentDeck = selectDeckForOpponent(availableCards);
+    }
     
     console.log(`🎴 Decks criados: Jogador ${gameState.playerDeck.length}, Oponente ${gameState.opponentDeck.length} cartas`);
 }
@@ -789,7 +970,7 @@ function createDecks() {
  * Seleciona deck para o jogador
  */
 function selectDeckForPlayer(cards) {
-    return shuffleArray([...cards]).slice(0, 12);
+    return shuffleArray([...cards]).slice(0, 12).map(cloneCard);
 }
 
 /**
@@ -823,7 +1004,7 @@ function selectDeckForOpponent(cards) {
             selectedCards = sortedByPower.slice(0, deckSize);
     }
     
-    return shuffleArray(selectedCards);
+    return shuffleArray(selectedCards).map(cloneCard);
 }
 
 /**
@@ -832,6 +1013,10 @@ function selectDeckForOpponent(cards) {
 function dealInitialHands() {
     gameState.playerHand = gameState.playerDeck.splice(0, 4);
     gameState.opponentHand = gameState.opponentDeck.splice(0, 4);
+    if (isMultiplayerMode()) {
+        gameState.simOpponentDeck = [...gameState.opponentDeck];
+        gameState.simOpponentHand = [...gameState.opponentHand];
+    }
     
     console.log(`🃏 Mãos distribuídas: Jogador ${gameState.playerHand.length}, Oponente ${gameState.opponentHand.length} cartas`);
 }
@@ -899,6 +1084,8 @@ async function playCardToArena(arenaId) {
     
     // Atualizar poder da arena
     gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+    gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+    gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
     
     // Animar movimento da carta
     await animateCardToArena(cardElement, arenaId, card);
@@ -922,18 +1109,410 @@ async function playCardToArena(arenaId) {
         const code = getURLParam('code');
         try {
             if (code && window.Multiplayer && Multiplayer.sendAction) {
-                await Multiplayer.sendAction(code, { type: 'play', arenaId, card });
+                const sendCard = { ...card };
+                if (sendCard.ability) {
+                    sendCard.ability = { ...sendCard.ability };
+                    delete sendCard.ability.used;
+                }
+                const actionId = Math.random().toString(36).slice(2) + Date.now();
+                const actionPayload = { id: actionId, type: 'play', arenaId, card: sendCard, clientId: gameState.clientId };
+                const sanitized = sanitizeForFirestore(actionPayload);
+                await Multiplayer.sendAction(code, sanitized);
+                if (window.Multiplayer && Multiplayer.updateGameState) {
+                    await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                }
                 if (Multiplayer.recordPlay) {
                     await Multiplayer.recordPlay(code);
                 }
+                // Ajuste imediato no doc: passar vez para o outro jogador
+                try {
+                    if (window.Multiplayer && Multiplayer.getRoomOnce && Multiplayer.updateGameState) {
+                        const room = await Multiplayer.getRoomOnce(code);
+                        if (room && room.players) {
+                            const hostId = room.hostId;
+                            const uids = Object.keys(room.players);
+                            const myUidNow = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+                            const otherId = myUidNow === hostId ? uids.find(id => id !== hostId) : hostId;
+                            if (otherId) {
+                                await Multiplayer.updateGameState(code, { currentPlayer: otherId });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Falha ao ajustar currentPlayer no doc após play:', e);
+                }
+                showTemporaryMessage('Aguardando oponente... alterna em até 5s');
+                elements.endTurnBtn.disabled = true;
             }
         } catch (err) {
             console.warn('Não foi possível enviar ação multiplayer:', err);
         }
     }
-    
-    // Continuar fluxo do jogo
-    continueGameAfterPlay();
+
+    // Habilidade ao jogar
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'reveal' && !card.ability.used) {
+        let pool = isMultiplayerMode() ? gameState.simOpponentHand : gameState.opponentHand;
+        if (!pool || pool.length === 0) {
+            // Fallback seguro: tenta usar mão conhecida ou reconstruir a simulação
+            if (isMultiplayerMode() && gameState.opponentHand && gameState.opponentHand.length) {
+                pool = gameState.opponentHand;
+            } else {
+                pool = [];
+            }
+        }
+        const count = Math.max(1, Math.min(card.ability.value || 2, pool.length));
+        const indices = [];
+        for (let i = 0; i < pool.length; i++) indices.push(i);
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const t = indices[i];
+            indices[i] = indices[j];
+            indices[j] = t;
+        }
+        const revealed = indices.slice(0, count).map(idx => pool[idx]?.name).filter(Boolean);
+        if (revealed.length > 0) {
+            showTemporaryMessage(`Sentido Aranha: ${revealed.join(', ')}`);
+            card.ability.used = true;
+        }
+    }
+
+    // Habilidade: Roubo Aleatório (Coringa)
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'steal' && !card.ability.used) {
+        const pool = gameState.arenas[arenaId].opponent;
+        if (pool && pool.length > 0) {
+            let idx = 0;
+            if (isMultiplayerMode()) {
+                const baseSeed = Number(gameState.multiplayerSeed || 0) ^ (arenaId * 2654435761) ^ hashString(String(card.id)) ^ (gameState.turn || 1);
+                const rnd = seededRandom(baseSeed);
+                idx = Math.floor(rnd() * pool.length);
+            } else {
+                idx = Math.floor(Math.random() * pool.length);
+            }
+            const stolen = pool.splice(idx, 1)[0];
+            gameState.arenas[arenaId].player.push(stolen);
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'steal', arenaId, card: sanitizeForFirestore(stolen), clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        } else {
+            showTemporaryMessage('Coringa: nada para roubar nesta arena');
+        }
+    }
+
+    // Habilidade: Metamorfose (Caçador de Marte)
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'morph_to_strongest' && !card.ability.used) {
+        const opp = gameState.arenas[arenaId].opponent;
+        if (opp && opp.length > 0) {
+            let bestIdx = 0;
+            let bestVal = -Infinity;
+            const hasHackPlayer = (gameState.arenas[arenaId].player || []).some(c => c && c.ability && c.ability.id === 'hack');
+            for (let i = 0; i < opp.length; i++) {
+                const oc = opp[i];
+                const base = calculateCardPower(oc);
+                const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                    ? applyArenaEffect(oc, gameState.arenas[arenaId].arena, 'opponent')
+                    : 0;
+                const difficultyBonus = (!isMultiplayerMode() ? gameState.opponentBuff || 0 : 0);
+                let val = base + arenaBonus + difficultyBonus;
+                if (hasHackPlayer) val = Math.floor(val * 0.9);
+                if (val > bestVal) { bestVal = val; bestIdx = i; }
+            }
+            const target = opp[bestIdx];
+            card.strength = target.strength || 0;
+            card.intelligence = target.intelligence || 0;
+            card.speed = target.speed || 0;
+            card.durability = target.durability || 0;
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'morph', arenaId, cardId: card.id, stats: { strength: card.strength, intelligence: card.intelligence, speed: card.speed, durability: card.durability }, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'change_arena' && !card.ability.used) {
+        const all = (typeof arenas !== 'undefined')
+            ? [...arenas.marvel, ...arenas.dc, ...arenas.neutral]
+            : [];
+        if (all.length > 0) {
+            const current = gameState.arenas[arenaId].arena;
+            let idx = 0;
+            if (isMultiplayerMode()) {
+                const baseSeed = Number(gameState.multiplayerSeed || 0) ^ (arenaId * 2654435761) ^ hashString(String(card.id)) ^ (gameState.turn || 1);
+                const rnd = seededRandom(baseSeed);
+                idx = Math.floor(rnd() * all.length);
+            } else {
+                idx = Math.floor(Math.random() * all.length);
+            }
+            let newArena = all[idx];
+            if (current && newArena && newArena.name === current.name) {
+                newArena = all[(idx + 1) % all.length];
+            }
+            gameState.arenas[arenaId].arena = newArena;
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'change_arena', arenaId, arena: newArena, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'change_all_arenas' && !card.ability.used) {
+        let picked = [];
+        if (typeof selectRandomArenasSeeded === 'function' && isMultiplayerMode()) {
+            const seed = Number(gameState.multiplayerSeed || 0) ^ hashString('wiccano') ^ (gameState.turn || 1);
+            picked = selectRandomArenasSeeded(seed);
+        } else if (typeof selectRandomArenas === 'function') {
+            picked = selectRandomArenas();
+        }
+        if (picked && picked.length >= 3) {
+            for (let i = 1; i <= 3; i++) {
+                gameState.arenas[i].arena = picked[i - 1];
+                gameState.arenas[i].playerPower = calculateArenaPower(i, 'player');
+                gameState.arenas[i].opponentPower = calculateArenaPower(i, 'opponent');
+            }
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'change_all_arenas', arenas: picked, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'max_allies' && !card.ability.used) {
+        const items = [];
+        for (let i = 1; i <= 3; i++) {
+            const arr = gameState.arenas[i].player;
+            for (let idx = 0; idx < arr.length; idx++) {
+                const c = arr[idx];
+                if (!c) continue;
+                c.strength = 100;
+                c.intelligence = 100;
+                c.speed = 100;
+                c.durability = 100;
+                items.push({ arenaId: i, cardId: c.id });
+            }
+            gameState.arenas[i].playerPower = calculateArenaPower(i, 'player');
+        }
+        updateArenasDisplay();
+        card.ability.used = true;
+        if (isMultiplayerMode() && items.length) {
+            const code = getURLParam('code');
+            try {
+                if (code && window.Multiplayer && Multiplayer.sendAction) {
+                    const actionId = Math.random().toString(36).slice(2) + Date.now();
+                    const payload = { id: actionId, type: 'phoenix_max_allies', items, clientId: gameState.clientId };
+                    const sanitized = sanitizeForFirestore(payload);
+                    await Multiplayer.sendAction(code, sanitized);
+                    if (Multiplayer.updateGameState) {
+                        await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                    }
+                }
+            } catch (_) {}
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'smash_strongest' && !card.ability.used) {
+        const opp = gameState.arenas[arenaId].opponent;
+        if (opp && opp.length > 0) {
+            let bestIdx = 0;
+            let bestVal = -Infinity;
+            const hasHackPlayer = (gameState.arenas[arenaId].player || []).some(c => c && c.ability && c.ability.id === 'hack');
+            for (let i = 0; i < opp.length; i++) {
+                const oc = opp[i];
+                const base = calculateCardPower(oc);
+                const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                    ? applyArenaEffect(oc, gameState.arenas[arenaId].arena, 'opponent')
+                    : 0;
+                const difficultyBonus = (!isMultiplayerMode() ? gameState.opponentBuff || 0 : 0);
+                let val = base + arenaBonus + difficultyBonus;
+                if (hasHackPlayer) val = Math.floor(val * 0.9);
+                if (val > bestVal) { bestVal = val; bestIdx = i; }
+            }
+            const target = opp[bestIdx];
+            gameState.arenas[arenaId].opponent.splice(bestIdx, 1);
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'smash', arenaId, cardId: target.id, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
+    // Habilidade: Destruição de Arena (Darkside)
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'destroy_arena' && !card.ability.used) {
+        const opp = gameState.arenas[arenaId].opponent;
+        if (opp && opp.length > 0) {
+            const ids = opp.map(c => c && c.id).filter(id => id != null);
+            opp.splice(0, opp.length);
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'destroy_arena', arenaId, ids, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        } else {
+            showTemporaryMessage('Darkside: nenhuma carta inimiga para destruir');
+        }
+    }
+
+    // Habilidade: Duplicador (Ultron)
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'duplicate_all_arenas' && !card.ability.used) {
+        const targets = [1, 2, 3].filter(i => i !== arenaId);
+        const added = [];
+        for (const t of targets) {
+            const dup = { ...card };
+            dup.id = `${card.id}_dup_${t}_${Math.random().toString(36).slice(2)}`;
+            if (dup.ability) dup.ability = { ...dup.ability, used: true };
+            gameState.arenas[t].player.push(dup);
+            gameState.arenas[t].playerPower = calculateArenaPower(t, 'player');
+            added.push({ arenaId: t, card: sanitizeForFirestore(dup) });
+        }
+        updateArenasDisplay();
+        card.ability.used = true;
+        if (isMultiplayerMode() && added.length) {
+            const code = getURLParam('code');
+            try {
+                if (code && window.Multiplayer && Multiplayer.sendAction) {
+                    const actionId = Math.random().toString(36).slice(2) + Date.now();
+                    const payload = { id: actionId, type: 'duplicate_all', items: added, clientId: gameState.clientId };
+                    const sanitized = sanitizeForFirestore(payload);
+                    await Multiplayer.sendAction(code, sanitized);
+                    if (Multiplayer.updateGameState) {
+                        await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                    }
+                }
+            } catch (_) {}
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'maximize_if_lower' && !card.ability.used) {
+        const opp = gameState.arenas[arenaId].opponent;
+        let oppMax = 0;
+        if (opp && opp.length > 0) {
+            const hasHackPlayer = (gameState.arenas[arenaId].player || []).some(c => c && c.ability && c.ability.id === 'hack');
+            for (let i = 0; i < opp.length; i++) {
+                const oc = opp[i];
+                const base = calculateCardPower(oc);
+                const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                    ? applyArenaEffect(oc, gameState.arenas[arenaId].arena, 'opponent')
+                    : 0;
+                const difficultyBonus = (!isMultiplayerMode() ? gameState.opponentBuff || 0 : 0);
+                let val = base + arenaBonus + difficultyBonus;
+                if (hasHackPlayer) val = Math.floor(val * 0.9);
+                if (val > oppMax) oppMax = val;
+            }
+        }
+        const hasHackOpponent = (gameState.arenas[arenaId].opponent || []).some(c => c && c.ability && c.ability.id === 'hack');
+        const myBase = calculateCardPower(card);
+        const myArenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+            ? applyArenaEffect(card, gameState.arenas[arenaId].arena, 'player')
+            : 0;
+        let myVal = myBase + myArenaBonus;
+        if (hasHackOpponent) myVal = Math.floor(myVal * 0.9);
+        if (myVal < oppMax) {
+            card.strength = 100;
+            card.intelligence = 100;
+            card.speed = 100;
+            card.durability = 100;
+            card.ability.used = true;
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            updateArenasDisplay();
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'morph', arenaId, cardId: card.id, stats: { strength: card.strength, intelligence: card.intelligence, speed: card.speed, durability: card.durability }, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
+    if (!isMultiplayerMode()) {
+        continueGameAfterPlay();
+    } else {
+        await tryAutoTeleportNightcrawler();
+    }
 }
 
 /**
@@ -961,9 +1540,17 @@ function continueGameAfterPlay() {
 function handleRemoteAction(entry) {
     if (!entry || !entry.action) return;
     const { action, uid } = entry;
+    const eventId = entry.id || action.id;
+    const actionId = action && action.id;
+    if (eventId || actionId) {
+        const already = (eventId && gameState.processedActionIds.includes(eventId)) || (actionId && gameState.processedActionIds.includes(actionId));
+        if (already) return;
+        if (eventId) gameState.processedActionIds.push(eventId);
+        if (actionId) gameState.processedActionIds.push(actionId);
+    }
     const myUid = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
     if (action.type === 'play') {
-        if (myUid && uid === myUid) return; // ignora jogadas próprias
+        if (action.clientId && action.clientId === gameState.clientId) return;
         const arenaId = action.arenaId;
         const card = action.card;
         (async () => {
@@ -971,12 +1558,158 @@ function handleRemoteAction(entry) {
                 await animateOpponentCard(arenaId, card);
                 gameState.arenas[arenaId].opponent.push(card);
                 gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
                 updateArenasDisplay();
                 // Em multiplayer, quem avança turno é o estado da sala
+                // Atualizar simulação da mão do oponente
+                if (isMultiplayerMode()) {
+                    const idx = gameState.simOpponentHand.findIndex(c => c && c.id === card.id);
+                    if (idx !== -1) gameState.simOpponentHand.splice(idx, 1);
+                    if (gameState.simOpponentDeck.length > 0) {
+                        gameState.simOpponentHand.push(gameState.simOpponentDeck.shift());
+                    }
+                }
             } catch (e) {
                 console.error('Falha ao aplicar ação remota:', e);
             }
         })();
+    }
+    if (action.type === 'pass') {
+        if (myUid && uid === myUid) return; // ignora meu próprio pass
+        showTemporaryMessage('Oponente passou o turno.');
+        updateGameDisplay();
+    }
+    if (action.type === 'teleport') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const from = action.from;
+        const to = action.to;
+        const cardId = action.cardId;
+        if (from && to && cardId) {
+            const idx = gameState.arenas[from].opponent.findIndex(c => c && c.id === cardId);
+            if (idx !== -1) {
+                const card = gameState.arenas[from].opponent.splice(idx, 1)[0];
+                gameState.arenas[to].opponent.push(card);
+                gameState.arenas[from].opponentPower = calculateArenaPower(from, 'opponent');
+                gameState.arenas[to].opponentPower = calculateArenaPower(to, 'opponent');
+                updateArenasDisplay();
+            }
+        }
+    }
+    if (action.type === 'change_arena') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const arenaObj = action.arena;
+        if (arenaId && arenaObj) {
+            gameState.arenas[arenaId].arena = arenaObj;
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            updateArenasDisplay();
+        }
+    }
+    if (action.type === 'change_all_arenas') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arr = action.arenas || [];
+        if (arr.length >= 3) {
+            for (let i = 1; i <= 3; i++) {
+                gameState.arenas[i].arena = arr[i - 1];
+                gameState.arenas[i].playerPower = calculateArenaPower(i, 'player');
+                gameState.arenas[i].opponentPower = calculateArenaPower(i, 'opponent');
+            }
+            updateArenasDisplay();
+        }
+    }
+    if (action.type === 'duplicate_all') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const items = action.items || [];
+        for (const it of items) {
+            const t = it.arenaId;
+            const c = it.card;
+            if (t && c) {
+                gameState.arenas[t].opponent.push(c);
+                gameState.arenas[t].opponentPower = calculateArenaPower(t, 'opponent');
+            }
+        }
+        updateArenasDisplay();
+    }
+    if (action.type === 'phoenix_max_allies') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const items = action.items || [];
+        for (const it of items) {
+            const t = it.arenaId;
+            const id = it.cardId;
+            if (t && id != null) {
+                const idx = gameState.arenas[t].opponent.findIndex(c => c && c.id === id);
+                if (idx !== -1) {
+                    const c = gameState.arenas[t].opponent[idx];
+                    c.strength = 100;
+                    c.intelligence = 100;
+                    c.speed = 100;
+                    c.durability = 100;
+                    gameState.arenas[t].opponentPower = calculateArenaPower(t, 'opponent');
+                }
+            }
+        }
+        updateArenasDisplay();
+    }
+    if (action.type === 'smash') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const cardId = action.cardId;
+        if (arenaId && cardId != null) {
+            const idx = gameState.arenas[arenaId].player.findIndex(c => c && c.id === cardId);
+            if (idx !== -1) {
+                gameState.arenas[arenaId].player.splice(idx, 1);
+                gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                updateArenasDisplay();
+            }
+        }
+    }
+    if (action.type === 'destroy_arena') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const ids = action.ids || [];
+        if (arenaId) {
+            if (ids.length > 0) {
+                gameState.arenas[arenaId].player = gameState.arenas[arenaId].player.filter(c => !ids.includes(c && c.id));
+            } else {
+                gameState.arenas[arenaId].player = [];
+            }
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            updateArenasDisplay();
+        }
+    }
+    if (action.type === 'morph') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const cardId = action.cardId;
+        const stats = action.stats || {};
+        if (arenaId && cardId != null) {
+            const idx = gameState.arenas[arenaId].opponent.findIndex(c => c && c.id === cardId);
+            if (idx !== -1) {
+                const oc = gameState.arenas[arenaId].opponent[idx];
+                oc.strength = stats.strength || 0;
+                oc.intelligence = stats.intelligence || 0;
+                oc.speed = stats.speed || 0;
+                oc.durability = stats.durability || 0;
+                gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                updateArenasDisplay();
+            }
+        }
+    }
+    if (action.type === 'steal') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const stolen = action.card;
+        if (arenaId && stolen && stolen.id != null) {
+            const idx = gameState.arenas[arenaId].player.findIndex(c => c && c.id === stolen.id);
+            if (idx !== -1) {
+                const card = gameState.arenas[arenaId].player.splice(idx, 1)[0];
+                gameState.arenas[arenaId].opponent.push(card);
+                gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                updateArenasDisplay();
+            }
+        }
     }
     
     if (action.type === 'end_game') {
@@ -1088,6 +1821,9 @@ function calculateArenaPower(arenaId, side) {
     
     // Cálculo normal de poder
     let totalPower = 0;
+    const hackMultiplier = (side === 'opponent'
+        ? (arenaData.player || []).some(c => c && c.ability && c.ability.id === 'hack')
+        : (arenaData.opponent || []).some(c => c && c.ability && c.ability.id === 'hack')) ? 0.9 : 1.0;
     
     arenaData[side].forEach(card => {
         const basePower = calculateCardPower(card);
@@ -1106,10 +1842,19 @@ function calculateArenaPower(arenaId, side) {
         
         // 🔥 BÔNUS DE DIFICULDADE PARA OPONENTE (apenas singleplayer)
         const difficultyBonus = (side === 'opponent' && !isMultiplayerMode()) ? gameState.opponentBuff : 0;
-        
-        totalPower += basePower + arenaBonus + difficultyBonus;
+        let contrib = basePower + arenaBonus + difficultyBonus;
+        if (hackMultiplier !== 1) {
+            contrib = Math.floor(contrib * hackMultiplier);
+        }
+        totalPower += contrib;
     });
     
+    const hasThanosOther = (side === 'opponent'
+        ? (arenaData.player || []).some(c => c && c.ability && c.ability.id === 'thanos_half')
+        : (arenaData.opponent || []).some(c => c && c.ability && c.ability.id === 'thanos_half'));
+    if (hasThanosOther) {
+        totalPower = Math.floor(totalPower * 0.5);
+    }
     return totalPower;
 }
 
@@ -1197,9 +1942,12 @@ function updateArenaCards(arenaData, arenaId) {
             const arenaBonus = (typeof applyArenaEffect === 'function' && arenaData.arena)
                 ? applyArenaEffect(card, arenaData.arena, 'player')
                 : 0;
-            const adjustedPower = basePower + arenaBonus;
+            const hasHackOpponent = (arenaData.opponent || []).some(c => c && c.ability && c.ability.id === 'hack');
+            let adjustedPower = basePower + arenaBonus;
+            if (hasHackOpponent) adjustedPower = Math.floor(adjustedPower * 0.9);
             const badges = [];
             if (arenaBonus) badges.push(`Arena +${arenaBonus}`);
+            if (card.ability && card.ability.name) badges.push(`Habilidade: ${card.ability.name}`);
             playerContainer.appendChild(createArenaCardElement(card, adjustedPower, badges));
         });
     }
@@ -1212,10 +1960,13 @@ function updateArenaCards(arenaData, arenaId) {
                 ? applyArenaEffect(card, arenaData.arena, 'opponent')
                 : 0;
             const difficultyBonus = gameState.opponentBuff || 0;
-            const adjustedPower = basePower + arenaBonus + difficultyBonus;
+            const hasHackPlayer = (arenaData.player || []).some(c => c && c.ability && c.ability.id === 'hack');
+            let adjustedPower = basePower + arenaBonus + difficultyBonus;
+            if (hasHackPlayer) adjustedPower = Math.floor(adjustedPower * 0.9);
             const badges = [];
             if (arenaBonus) badges.push(`Arena +${arenaBonus}`);
             if (difficultyBonus) badges.push(`IA +${difficultyBonus}`);
+            if (card.ability && card.ability.name) badges.push(`Habilidade: ${card.ability.name}`);
             opponentContainer.appendChild(createArenaCardElement(card, adjustedPower, badges));
         });
     }
@@ -1233,7 +1984,7 @@ function createArenaCardElement(card, adjustedPower = null, badges = []) {
     const cardElement = document.createElement('div');
     cardElement.className = `arena-card ${card.universe}`;
     cardElement.dataset.id = card.id;
-    cardElement.title = `${card.name} - Poder: ${calculateCardPower(card)}`;
+    cardElement.title = `${card.name} - Poder: ${calculateCardPower(card)}${card.ability && card.ability.name ? ' - Habilidade: ' + card.ability.name : ''}`;
     if (card.rarity === 'rare') {
         cardElement.classList.add('rare');
     }
@@ -1410,11 +2161,14 @@ function updateGameInfo() {
         elements.playerTurn.innerHTML = `Jogo Finalizado!<br>Dificuldade: ${difficultyInfo.name}`;
         elements.playerTurn.className = 'player-turn opponent-turn';
     } else {
+        const countdownText = (isMultiplayerMode() && gameState.turnChangeCountdown > 0)
+            ? `<br>Troca de vez em ${gameState.turnChangeCountdown}s`
+            : '';
         if (gameState.currentPlayer === 'player') {
-            elements.playerTurn.innerHTML = `Sua vez!<br>Dificuldade: ${difficultyInfo.name}`;
+            elements.playerTurn.innerHTML = `Sua vez!<br>Dificuldade: ${difficultyInfo.name}${countdownText}`;
             elements.playerTurn.className = 'player-turn';
         } else {
-            elements.playerTurn.innerHTML = `Vez do Oponente<br>Dificuldade: ${difficultyInfo.name}`;
+            elements.playerTurn.innerHTML = `Vez do Oponente<br>Dificuldade: ${difficultyInfo.name}${countdownText}`;
             elements.playerTurn.className = 'player-turn opponent-turn';
         }
     }
@@ -1486,6 +2240,13 @@ function createCardElement(card) {
         attributeTags += `<span class="attribute-tag attribute-tech">🔧 ${card.attributes}</span>`;
     }
     
+    const abilityBlock = card.ability ? `
+        <div class="card-ability">
+            <span class="ability-label">Habilidade</span>
+            <span class="ability-name">${card.ability.name || 'Especial'}</span>
+            ${card.ability.description ? `<div class="ability-desc">${card.ability.description}</div>` : ''}
+        </div>
+    ` : '';
     cardElement.innerHTML = `
         <div class="card-header">${card.name}</div>
         <div class="card-image" style="background-image: url('${card.image}')" 
@@ -1513,6 +2274,7 @@ function createCardElement(card) {
                 <span class="stat-value">${calculateCardPower(card)}</span>
             </div>
         </div>
+        ${abilityBlock}
         ${attributeTags ? `<div class="card-attributes">${attributeTags}</div>` : ''}
     `;
     
@@ -1565,7 +2327,8 @@ function renderCardsToContainer(cards, container) {
  */
 function updateControls() {
     elements.battleBtn.disabled = gameState.turn < gameState.maxTurns || gameState.gameEnded;
-    elements.endTurnBtn.disabled = gameState.currentPlayer !== 'player' || gameState.gameEnded;
+    const locked = isMultiplayerMode() && gameState.turnChangeLock;
+    elements.endTurnBtn.disabled = (gameState.currentPlayer !== 'player') || gameState.gameEnded || locked;
 }
 
 /**
@@ -1584,13 +2347,14 @@ function updateArenaTitle() {
 /**
  * Finaliza o turno atual
  */
-function endTurn() {
+async function endTurn() {
     if (gameState.currentPlayer !== 'player' || gameState.gameEnded) {
         console.log('⏸️ Não pode finalizar turno agora');
         return;
     }
     
     console.log('⏭️ Finalizando turno...');
+    elements.endTurnBtn.disabled = true;
     
     // Esconder mensagem ao finalizar turno
     hideTemporaryMessage();
@@ -1601,12 +2365,97 @@ function endTurn() {
         playCardToArena(arenaId);
     } else {
         // Passar turno sem jogar
-        gameState.currentPlayer = 'opponent';
-        updateGameDisplay();
-            if (!isMultiplayerMode()) {
-                opponentPlay();
+        if (isMultiplayerMode()) {
+            const code = getURLParam('code');
+            try {
+                if (code && window.Multiplayer && Multiplayer.sendAction) {
+                    const actionId = Math.random().toString(36).slice(2) + Date.now();
+                    const actionPayload = { id: actionId, type: 'pass', clientId: gameState.clientId };
+                    const sanitized = sanitizeForFirestore(actionPayload);
+                    Multiplayer.sendAction(code, sanitized);
+                    if (window.Multiplayer && Multiplayer.updateGameState) {
+                        Multiplayer.updateGameState(code, { lastAction: sanitized });
+                    }
+                }
+                if (window.Multiplayer && Multiplayer.recordPlay && code) {
+                    Multiplayer.recordPlay(code);
+                }
+                // Ajuste imediato no doc: passar vez para o outro jogador
+                try {
+                    if (window.Multiplayer && Multiplayer.getRoomOnce && Multiplayer.updateGameState) {
+                        const room = await Multiplayer.getRoomOnce(code);
+                        if (room && room.players) {
+                            const hostId = room.hostId;
+                            const uids = Object.keys(room.players);
+                            const myUidNow = (window.Multiplayer && Multiplayer.getUid) ? Multiplayer.getUid() : null;
+                            const otherId = myUidNow === hostId ? uids.find(id => id !== hostId) : hostId;
+                            if (otherId) {
+                                await Multiplayer.updateGameState(code, { currentPlayer: otherId });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Falha ao ajustar currentPlayer no doc após pass:', e);
+                }
+            } catch (err) {
+                console.warn('Não foi possível enviar PASS no multiplayer:', err);
             }
+            showTemporaryMessage('Turno será alternado em até 5s...');
+            // Não altera currentPlayer localmente; sala vai alternar
+            updateGameDisplay();
+        } else {
+            await tryAutoTeleportNightcrawler();
+            gameState.currentPlayer = 'opponent';
+            updateGameDisplay();
+            opponentPlay();
+        }
     }
+}
+
+async function tryAutoTeleportNightcrawler() {
+    const finder = (() => {
+        for (let i = 1; i <= 3; i++) {
+            const idx = gameState.arenas[i].player.findIndex(c => c && ((c.ability && c.ability.id === 'teleport') || (c.name && c.name.toLowerCase() === 'noturno')));
+            if (idx !== -1) return { arenaId: i, index: idx, card: gameState.arenas[i].player[idx] };
+        }
+        return null;
+    })();
+    if (!finder) return false;
+    const card = finder.card;
+    if (card.ability && card.ability.used) return false;
+    let target = null;
+    let worst = Infinity;
+    for (let i = 1; i <= 3; i++) {
+        const p = gameState.arenas[i].playerPower ?? calculateArenaPower(i, 'player');
+        const o = gameState.arenas[i].opponentPower ?? calculateArenaPower(i, 'opponent');
+        const diff = p - o;
+        if (diff < worst) {
+            worst = diff;
+            target = i;
+        }
+    }
+    if (!target || target === finder.arenaId) return false;
+    gameState.arenas[finder.arenaId].player.splice(finder.index, 1);
+    gameState.arenas[target].player.push(card);
+    gameState.arenas[finder.arenaId].playerPower = calculateArenaPower(finder.arenaId, 'player');
+    gameState.arenas[target].playerPower = calculateArenaPower(target, 'player');
+    if (card.ability) card.ability.used = true;
+    updateArenasDisplay();
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        try {
+            if (code && window.Multiplayer && Multiplayer.sendAction) {
+                const actionId = Math.random().toString(36).slice(2) + Date.now();
+                const payload = { id: actionId, type: 'teleport', cardId: card.id, from: finder.arenaId, to: target, clientId: gameState.clientId };
+                const sanitized = sanitizeForFirestore(payload);
+                await Multiplayer.sendAction(code, sanitized);
+                if (Multiplayer.updateGameState) {
+                    await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                }
+            }
+        } catch (_) {}
+    }
+    return true;
 }
 
 /**
@@ -1896,7 +2745,7 @@ function resetGame() {
                 if (isHost) {
                     const newSeed = Math.floor(Math.random() * 1e9);
                     console.log('🧩 Host gerando nova seed para próxima partida:', newSeed);
-                    Multiplayer.updateGameState(code, { gameSeed: newSeed, turn: 1, currentPlayer: room.hostId || uid, status: 'playing' })
+                    Multiplayer.updateGameState(code, { gameSeed: newSeed, turn: 1, currentPlayer: room.hostId || uid, turnStarter: room.hostId || uid, playsThisTurn: {}, status: 'playing' })
                       .then(() => {
                           gameState.multiplayerSeed = newSeed;
                           restartMultiplayerWithSeed(newSeed);
@@ -1979,10 +2828,12 @@ function restartMultiplayerWithSeed(seed) {
 
     // Resetar estado do jogo
     gameState.turn = 1;
-    gameState.currentPlayer = 'player';
+    const role = getURLParam('role');
+    gameState.currentPlayer = role === 'host' ? 'player' : 'opponent';
     gameState.gameEnded = false;
     gameState.resultShown = false;
     gameState.selectedCardId = null;
+    gameState.processedActionIds = [];
 
     // Limpar cartas
     gameState.playerHand = [];
@@ -2365,4 +3216,32 @@ document.addEventListener('dragstart', (e) => {
         e.preventDefault();
     }
 });
+
+function cloneCard(card) {
+    const copy = {
+        id: card.id,
+        name: card.name,
+        universe: card.universe,
+        image: card.image,
+        strength: card.strength,
+        intelligence: card.intelligence,
+        speed: card.speed,
+        durability: card.durability,
+        rarity: card.rarity,
+        attributes: card.attributes,
+        gender: card.gender
+    };
+    if (card.ability) {
+        copy.ability = {
+            id: card.ability.id,
+            name: card.ability.name,
+            description: card.ability.description,
+            trigger: card.ability.trigger,
+            effect: card.ability.effect,
+            value: card.ability.value,
+            uses: card.ability.uses
+        };
+    }
+    return copy;
+}
 

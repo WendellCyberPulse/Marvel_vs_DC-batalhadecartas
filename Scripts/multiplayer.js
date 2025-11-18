@@ -71,7 +71,7 @@
     }
     if (exists.exists) throw new Error('Não foi possível gerar um código único');
 
-    const roomDoc = {
+  const roomDoc = {
       code,
       status: 'lobby', // lobby | playing | ended
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -82,6 +82,7 @@
       maxPlayers: 2,
       currentPlayer: null,
       turn: 1,
+      turnStarter: null,
       gameSeed: Math.floor(Math.random() * 1e9),
     };
 
@@ -138,7 +139,8 @@
     const players = room.players || {};
     const uids = Object.keys(players);
     if (uids.length === 2 && uids.every(id => players[id].ready)) {
-      await ref.update({ status: 'playing', currentPlayer: room.hostId || uids[0], turn: 1, maxTurns: room.maxTurns || 4, playsThisTurn: {} });
+      const starter = room.hostId || uids[0];
+      await ref.update({ status: 'playing', currentPlayer: starter, turnStarter: starter, turn: 1, maxTurns: room.maxTurns || 4, playsThisTurn: {} });
     }
   }
 
@@ -180,7 +182,10 @@
 
   // Log de ações (útil para replays/debug)
   async function sendAction(code, action) {
-    const user = auth.currentUser;
+    let user = auth && auth.currentUser;
+    if (!user && auth) {
+      try { await auth.signInAnonymously(); user = auth.currentUser; } catch (_) {}
+    }
     const ref = db.collection('rooms').doc(code).collection('actions');
     await ref.add({
       ts: firebase.firestore.FieldValue.serverTimestamp(),
@@ -190,8 +195,11 @@
   }
 
   async function recordPlay(code) {
-    const user = auth && auth.currentUser ? auth.currentUser : null;
-    if (!user) return;
+    let user = auth && auth.currentUser ? auth.currentUser : null;
+    if (!user && auth) {
+      try { await auth.signInAnonymously(); user = auth.currentUser; } catch (_) {}
+    }
+    if (!user) { console.warn('recordPlay: usuário não autenticado'); return; }
     const uid = user.uid;
     const ref = db.collection('rooms').doc(code);
     let shouldEnd = false;
@@ -215,10 +223,13 @@
           shouldEnd = true;
           tx.update(ref, { status: 'ended', playsThisTurn: {}, currentPlayer: null });
         } else {
+          const lastStarter = room.turnStarter || hostId;
+          const nextStarter = (lastStarter === hostId) ? guestId : hostId;
           tx.update(ref, {
             turn: currentTurn + 1,
             playsThisTurn: {},
-            currentPlayer: hostId
+            turnStarter: nextStarter,
+            currentPlayer: nextStarter
           });
         }
       } else {

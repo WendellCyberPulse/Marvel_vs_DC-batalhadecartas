@@ -524,6 +524,16 @@ button:disabled {
     color: white;
 }
 
+.attribute-ability {
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+    color: #fff;
+}
+
+.card-ability { margin-top: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(124, 58, 237, 0.15); border: 1px solid rgba(124, 58, 237, 0.4); color: #fff; }
+.card-ability .ability-label { font-weight: 700; margin-right: 6px; color: #c084fc; }
+.card-ability .ability-name { font-weight: 700; }
+.card-ability .ability-desc { margin-top: 4px; font-size: 0.8rem; opacity: 0.9; }
+
 /* Arenas */
 .arena-container {
     background: rgba(0, 0, 0, 0.4);

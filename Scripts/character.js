@@ -9,7 +9,16 @@ const characters = {
             strength: 85,
             intelligence: 95,
             speed: 90,
-            durability: 70
+            durability: 70,
+            ability: {
+                id: 'spider_sense',
+                name: 'Sentido Aranha',
+                description: 'Revela duas cartas na mão do oponente ao jogar.',
+                trigger: 'onPlay',
+                effect: 'reveal',
+                value: 2,
+                uses: 1
+            }
         },
         {
             id: 2,
@@ -50,7 +59,15 @@ const characters = {
             strength: 100,
             intelligence: 60,
             speed: 70,
-            durability: 100
+            durability: 100,
+            ability: {
+                id: 'hulk_smash',
+                name: 'Hulk Esmaga',
+                description: 'Ao jogar, elimina a carta mais forte do oponente na arena.',
+                trigger: 'onPlay',
+                effect: 'smash_strongest',
+                uses: 1
+            }
         },
         {
             id: 6,
@@ -60,7 +77,17 @@ const characters = {
             strength: 90,
             intelligence: 65,
             speed: 70,
-            durability: 100
+            durability: 100,
+            ability: {
+                id: 'regeneration',
+                name: 'Regeneração',
+                description: 'No fim da sua jogada, ganha +10 de durabilidade (1 vez).',
+                trigger: 'onTurnEnd',
+                effect: 'self_buff',
+                stat: 'durability',
+                value: 10,
+                uses: 1
+            }
         },
         {
             id: 7,
@@ -155,6 +182,14 @@ const characters = {
             speed: 90,
             durability: 100,
             rarity: "rare"
+            ,ability: {
+                id: 'thanos_half',
+                name: 'Metade do Destino',
+                description: 'Ao jogar, reduz pela metade o poder total do oponente nesta arena.',
+                trigger: 'onPlay',
+                effect: 'halve_arena',
+                uses: 1
+            }
         },
         {
             id: 16,
@@ -165,7 +200,15 @@ const characters = {
             intelligence: 100,
             speed: 90,
             durability: 90,
-            gender: "female"
+            gender: "female",
+            ability: {
+                id: 'scarlet_change_arena',
+                name: 'Alteração de Arena',
+                description: 'Ao jogar, muda a arena atual para outra aleatória.',
+                trigger: 'onPlay',
+                effect: 'change_arena',
+                uses: 1
+            }
         },
 
         {
@@ -188,7 +231,15 @@ const characters = {
             intelligence: 100,
             speed: 90,
             durability: 100,
-            attributes: "tech"
+            attributes: "tech",
+            ability: {
+                id: 'ultron_duplicate',
+                name: 'Duplicador',
+                description: 'Ao jogar, coloca uma cópia sua nas outras arenas.',
+                trigger: 'onPlay',
+                effect: 'duplicate_all_arenas',
+                uses: 1
+            }
         },
         {
             id: 19,
@@ -220,7 +271,15 @@ const characters = {
             intelligence: 100,
             speed: 100,
             durability: 100,
-            rarity: "rare"
+            rarity: "rare",
+            ability: {
+                id: 'change_all_arenas',
+                name: 'Alteração de Todas as Arenas',
+                description: 'Ao jogar, altera todas as arenas da partida.',
+                trigger: 'onPlay',
+                effect: 'change_all_arenas',
+                uses: 1
+            }
         },
         {
             id: 22,
@@ -241,6 +300,14 @@ const characters = {
             intelligence: 90,
             speed: 100,
             durability: 90,
+            ability: {
+                id: 'teleport',
+                name: 'Teleporte',
+                description: 'Move-se para a arena onde você está perdendo no fim da sua jogada.',
+                trigger: 'onTurnEnd',
+                effect: 'teleport_to_losing',
+                uses: 1
+            }
         },
         {
             id: 24,
@@ -253,6 +320,14 @@ const characters = {
             durability: 100,
             rarity: "rare",
             gender: "female"
+            ,ability: {
+                id: 'phoenix_force',
+                name: 'Força Fênix',
+                description: 'Ao jogar, maximiza os atributos de todas as cartas aliadas.',
+                trigger: 'onPlay',
+                effect: 'max_allies',
+                uses: 1
+            }
         },
         {
             id: 25,
@@ -341,7 +416,15 @@ const characters = {
             strength: 100,
             intelligence: 85,
             speed: 100,
-            durability: 100
+            durability: 100,
+            ability: {
+                id: 'conditional_maximize',
+                name: 'Maximização Condicional',
+                description: 'Ao jogar, se for mais fraco que o oponente na arena, maximiza atributos.',
+                trigger: 'onPlay',
+                effect: 'maximize_if_lower',
+                uses: 1
+            }
         },
         {
             id: 33,
@@ -414,7 +497,15 @@ const characters = {
             intelligence: 100,
             speed: 60,
             durability: 90,
-            attributes: "tech"
+            attributes: "tech",
+            ability: {
+                id: 'hack',
+                name: 'Hack',
+                description: 'Reduz 10% do poder das cartas inimigas nesta arena enquanto estiver presente.',
+                trigger: 'aura',
+                effect: 'reduce_percent',
+                value: 0.10
+            }
         },
         {
             id: 40,
@@ -434,7 +525,15 @@ const characters = {
             strength: 20,
             intelligence: 100,
             speed: 60,
-            durability: 50
+            durability: 50,
+            ability: {
+                id: 'joker_steal',
+                name: 'Roubo Aleatório',
+                description: 'Ao jogar, rouba uma carta aleatória do oponente nesta arena e coloca do seu lado.',
+                trigger: 'onPlay',
+                effect: 'steal',
+                uses: 1
+            }
         },
         {
             id: 42,
@@ -475,7 +574,15 @@ const characters = {
             intelligence: 100,
             speed: 60,
             durability: 100,
-            rarity: "rare"
+            rarity: "rare",
+            ability: {
+                id: 'darkside_destroy',
+                name: 'Destruição de Arena',
+                description: 'Ao jogar, elimina todas as cartas inimigas da arena.',
+                trigger: 'onPlay',
+                effect: 'destroy_arena',
+                uses: 1
+            }
         },
 
         {
@@ -563,6 +670,14 @@ const characters = {
             intelligence: 95,
             speed: 90,
             durability: 95,
+            ability: {
+                id: 'martian_morph',
+                name: 'Metamorfose',
+                description: 'Ao jogar, assume os atributos da carta mais forte do oponente na arena.',
+                trigger: 'onPlay',
+                effect: 'morph_to_strongest',
+                uses: 1
+            }
         },
         {
             id: 54,
@@ -607,7 +722,14 @@ const characters = {
             intelligence: 85,
             speed: 100,
             durability: 100,
-            gender: "female",
+            ability: {
+                id: 'conditional_maximize',
+                name: 'Maximização Condicional',
+                description: 'Ao jogar, se for mais fraca que o oponente na arena, maximiza atributos.',
+                trigger: 'onPlay',
+                effect: 'maximize_if_lower',
+                uses: 1
+            }
         },
         {
             id: 58,
@@ -677,4 +799,3 @@ function shuffleArray(array) {
 }
 
 console.log('✅ Characters.js totalmente carregado');
-
