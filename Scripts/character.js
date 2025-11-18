@@ -348,7 +348,15 @@ const characters = {
             intelligence: 100,
             speed: 80,
             durability: 90,
-            rarity: "rare"
+            rarity: "rare",
+            ability: {
+                id: 'strange_portal',
+                name: 'Portal Mágico',
+                description: 'Ao jogar, invoca uma carta aliada da Marvel para a arena.',
+                trigger: 'onPlay',
+                effect: 'summon_marvel_ally',
+                uses: 1
+            }
         },
         {
             id: 27,
@@ -380,7 +388,15 @@ const characters = {
             intelligence: 100,
             speed: 95,
             durability: 100,
-            rarity: "rare"
+            rarity: "rare",
+            ability: {
+                id: 'galactus_devour',
+                name: 'Devorador de Mundos',
+                description: 'Ao jogar, remove uma arena onde você está perdendo.',
+                trigger: 'onPlay',
+                effect: 'devour_arena',
+                uses: 1
+            }
         },
         {
             id: 30,
@@ -406,7 +422,15 @@ const characters = {
             strength: 80,
             intelligence: 100,
             speed: 65,
-            durability: 75
+            durability: 75,
+            ability: {
+                id: 'batman_prep',
+                name: 'Preparo',
+                description: 'Ao jogar, zera os atributos da carta mais forte do oponente nesta arena.',
+                trigger: 'onPlay',
+                effect: 'zero_strongest',
+                uses: 1
+            }
         },
         {
             id: 32,
@@ -435,7 +459,15 @@ const characters = {
             intelligence: 80,
             speed: 90,
             durability: 95,
-            gender: "female"
+            gender: "female",
+            ability: {
+                id: 'amazon_summon',
+                name: 'Amazona',
+                description: 'Ao jogar, invoca uma carta feminina para a sua arena.',
+                trigger: 'onPlay',
+                effect: 'summon_female',
+                uses: 1
+            }
         },
         {
             id: 34,

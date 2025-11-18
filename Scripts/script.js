@@ -42,9 +42,9 @@ const gameState = {
     
     // Arenas
     arenas: {
-        1: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null },
-        2: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null },
-        3: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null }
+        1: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null, disabled: false },
+        2: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null, disabled: false },
+        3: { player: [], opponent: [], playerPower: 0, opponentPower: 0, arena: null, disabled: false }
     },
     
     // Progressão
@@ -903,6 +903,7 @@ async function timeUp() {
                     }
                 }
                 await tryAutoTeleportNightcrawler();
+                await tryRegenerationWolverine();
                 if (window.Multiplayer && Multiplayer.recordPlay && code) {
                     Multiplayer.recordPlay(code);
                 }
@@ -1061,6 +1062,10 @@ function selectCardFromHand(index) {
  * Joga carta selecionada na arena
  */
 async function playCardToArena(arenaId) {
+    if (gameState.arenas[arenaId] && gameState.arenas[arenaId].disabled) {
+        showTemporaryMessage('Arena devorada: não é possível jogar cartas aqui');
+        return;
+    }
     if (gameState.selectedCardId === null) {
         showTemporaryMessage('Selecione uma carta primeiro!');
         return;
@@ -1401,6 +1406,50 @@ async function playCardToArena(arenaId) {
         }
     }
 
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'zero_strongest' && !card.ability.used) {
+        const opp = gameState.arenas[arenaId].opponent;
+        if (opp && opp.length > 0) {
+            let bestIdx = 0;
+            let bestVal = -Infinity;
+            const hasHackPlayer = (gameState.arenas[arenaId].player || []).some(c => c && c.ability && c.ability.id === 'hack');
+            for (let i = 0; i < opp.length; i++) {
+                const oc = opp[i];
+                const base = calculateCardPower(oc);
+                const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                    ? applyArenaEffect(oc, gameState.arenas[arenaId].arena, 'opponent')
+                    : 0;
+                const difficultyBonus = (!isMultiplayerMode() ? gameState.opponentBuff || 0 : 0);
+                let val = base + arenaBonus + difficultyBonus;
+                if (hasHackPlayer) val = Math.floor(val * 0.9);
+                if (val > bestVal) { bestVal = val; bestIdx = i; }
+            }
+            const target = opp[bestIdx];
+            target.strength = 0;
+            target.intelligence = 0;
+            target.speed = 0;
+            target.durability = 0;
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'prep_zero', arenaId, cardId: target.id, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        } else {
+            showTemporaryMessage('Batman: nenhuma carta inimiga nesta arena');
+        }
+    }
+
     // Habilidade: Destruição de Arena (Darkside)
     if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'destroy_arena' && !card.ability.used) {
         const opp = gameState.arenas[arenaId].opponent;
@@ -1508,10 +1557,136 @@ async function playCardToArena(arenaId) {
         }
     }
 
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'summon_female' && !card.ability.used) {
+        const all = (typeof getAllCharacters === 'function') ? getAllCharacters() : [];
+        const females = all.filter(c => c && c.gender === 'female');
+        if (females.length > 0) {
+            let idx = 0;
+            if (isMultiplayerMode()) {
+                const baseSeed = Number(gameState.multiplayerSeed || 0) ^ (arenaId * 2654435761) ^ hashString(String(card.id)) ^ (gameState.turn || 1);
+                const rnd = seededRandom(baseSeed);
+                idx = Math.floor(rnd() * females.length);
+            } else {
+                idx = Math.floor(Math.random() * females.length);
+            }
+            const base = females[idx];
+            const summon = { ...base };
+            summon.id = `${base.id}_summon_${arenaId}_${Math.random().toString(36).slice(2)}`;
+            if (summon.ability) summon.ability = { ...summon.ability, used: true };
+            gameState.arenas[arenaId].player.push(summon);
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'summon', arenaId, card: sanitizeForFirestore(summon), clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        } else {
+            showTemporaryMessage('Mulher-Maravilha: nenhuma carta feminina disponível');
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'summon_marvel_ally' && !card.ability.used) {
+        const all = (typeof getAllCharacters === 'function') ? getAllCharacters() : [];
+        const marvels = all.filter(c => c && c.universe === 'marvel');
+        if (marvels.length > 0) {
+            let idx = 0;
+            if (isMultiplayerMode()) {
+                const baseSeed = Number(gameState.multiplayerSeed || 0) ^ (arenaId * 2654435761) ^ hashString(String(card.id)) ^ (gameState.turn || 1) ^ 0xA5A5A5A5;
+                const rnd = seededRandom(baseSeed);
+                idx = Math.floor(rnd() * marvels.length);
+            } else {
+                idx = Math.floor(Math.random() * marvels.length);
+            }
+            const base = marvels[idx];
+            const summon = { ...base };
+            summon.id = `${base.id}_portal_${arenaId}_${Math.random().toString(36).slice(2)}`;
+            if (summon.ability) summon.ability = { ...summon.ability, used: true };
+            gameState.arenas[arenaId].player.push(summon);
+            gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'summon', arenaId, card: sanitizeForFirestore(summon), clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        } else {
+            showTemporaryMessage('Dr. Estranho: nenhum aliado da Marvel disponível');
+        }
+    }
+
+    if (card && card.ability && card.ability.trigger === 'onPlay' && card.ability.effect === 'devour_arena' && !card.ability.used) {
+        let target = null;
+        let worst = Infinity;
+        for (let i = 1; i <= 3; i++) {
+            const p = gameState.arenas[i].playerPower ?? calculateArenaPower(i, 'player');
+            const o = gameState.arenas[i].opponentPower ?? calculateArenaPower(i, 'opponent');
+            const diff = p - o;
+            if (diff < 0 && diff < worst) {
+                worst = diff;
+                target = i;
+            }
+        }
+        if (!target) {
+            showTemporaryMessage('Galactus: nenhuma arena perdida para devorar');
+        } else {
+            gameState.arenas[target].player.splice(0, gameState.arenas[target].player.length);
+            gameState.arenas[target].opponent.splice(0, gameState.arenas[target].opponent.length);
+            gameState.arenas[target].playerPower = 0;
+            gameState.arenas[target].opponentPower = 0;
+            gameState.arenas[target].disabled = true;
+            gameState.arenas[target].arena = {
+                name: 'Mundo Devorado',
+                effect: 'Removida pela fome de Galactus',
+                effectType: 'none',
+                image: ''
+            };
+            updateArenasDisplay();
+            card.ability.used = true;
+            if (isMultiplayerMode()) {
+                const code = getURLParam('code');
+                try {
+                    if (code && window.Multiplayer && Multiplayer.sendAction) {
+                        const actionId = Math.random().toString(36).slice(2) + Date.now();
+                        const payload = { id: actionId, type: 'devour', arenaId: target, clientId: gameState.clientId };
+                        const sanitized = sanitizeForFirestore(payload);
+                        await Multiplayer.sendAction(code, sanitized);
+                        if (Multiplayer.updateGameState) {
+                            await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
     if (!isMultiplayerMode()) {
+        await tryAutoTeleportNightcrawler();
+        await tryRegenerationWolverine();
         continueGameAfterPlay();
     } else {
         await tryAutoTeleportNightcrawler();
+        await tryRegenerationWolverine();
     }
 }
 
@@ -1664,6 +1839,23 @@ function handleRemoteAction(entry) {
             }
         }
     }
+    if (action.type === 'prep_zero') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const cardId = action.cardId;
+        if (arenaId && cardId != null) {
+            const idx = gameState.arenas[arenaId].player.findIndex(c => c && c.id === cardId);
+            if (idx !== -1) {
+                const c = gameState.arenas[arenaId].player[idx];
+                c.strength = 0;
+                c.intelligence = 0;
+                c.speed = 0;
+                c.durability = 0;
+                gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                updateArenasDisplay();
+            }
+        }
+    }
     if (action.type === 'destroy_arena') {
         if (action.clientId && action.clientId === gameState.clientId) return;
         const arenaId = action.arenaId;
@@ -1696,6 +1888,23 @@ function handleRemoteAction(entry) {
             }
         }
     }
+    if (action.type === 'self_buff') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const cardId = action.cardId;
+        const stat = action.stat || 'durability';
+        const inc = action.value || 10;
+        if (arenaId && cardId != null) {
+            const idx = gameState.arenas[arenaId].opponent.findIndex(c => c && c.id === cardId);
+            if (idx !== -1) {
+                const oc = gameState.arenas[arenaId].opponent[idx];
+                const before = oc[stat] || 0;
+                oc[stat] = Math.min(100, before + inc);
+                gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                updateArenasDisplay();
+            }
+        }
+    }
     if (action.type === 'steal') {
         if (action.clientId && action.clientId === gameState.clientId) return;
         const arenaId = action.arenaId;
@@ -1709,6 +1918,34 @@ function handleRemoteAction(entry) {
                 gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
                 updateArenasDisplay();
             }
+        }
+    }
+    if (action.type === 'devour') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        if (arenaId) {
+            gameState.arenas[arenaId].player = [];
+            gameState.arenas[arenaId].opponent = [];
+            gameState.arenas[arenaId].playerPower = 0;
+            gameState.arenas[arenaId].opponentPower = 0;
+            gameState.arenas[arenaId].disabled = true;
+            gameState.arenas[arenaId].arena = {
+                name: 'Mundo Devorado',
+                effect: 'Removida pela fome de Galactus',
+                effectType: 'none',
+                image: ''
+            };
+            updateArenasDisplay();
+        }
+    }
+    if (action.type === 'summon') {
+        if (action.clientId && action.clientId === gameState.clientId) return;
+        const arenaId = action.arenaId;
+        const c = action.card;
+        if (arenaId && c) {
+            gameState.arenas[arenaId].opponent.push(c);
+            gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+            updateArenasDisplay();
         }
     }
     
@@ -1744,6 +1981,7 @@ function setupArenas(seed = null) {
         // Atualizar arenas no estado do jogo
         for (let i = 1; i <= 3; i++) {
             gameState.arenas[i].arena = selectedArenas[i - 1];
+            gameState.arenas[i].disabled = false;
         }
         
         console.log('🏟️ Arenas configuradas:', selectedArenas.map(a => a.name));
@@ -1868,8 +2106,8 @@ function updateArenasDisplay() {
         
         if (!arenaElement) continue;
         
-        // Aplicar estilo visual da arena
-        updateArenaVisuals(arenaElement, arenaData);
+    // Aplicar estilo visual da arena
+    updateArenaVisuals(arenaElement, arenaData);
         
         // Atualizar informações da arena
         updateArenaInfo(arenaElement, arenaData, i);
@@ -1900,6 +2138,7 @@ function updateArenaVisuals(arenaElement, arenaData) {
     if (arenaData.arena && arenaData.arena.effectType === 'speed_decides') {
         arenaElement.classList.add('speed-arena');
     }
+    arenaElement.classList.toggle('disabled', !!arenaData.disabled);
 }
 
 /**
@@ -2091,7 +2330,9 @@ function opponentPlay() {
             // Escolher carta e arena aleatórias (IA simples)
             const randomCardIndex = Math.floor(Math.random() * gameState.opponentHand.length);
             const card = gameState.opponentHand[randomCardIndex];
-            const arenaId = Math.floor(Math.random() * 3) + 1;
+            const availableArenas = [1,2,3].filter(i => !gameState.arenas[i].disabled);
+            if (availableArenas.length === 0) { endOpponentTurn(); return; }
+            const arenaId = availableArenas[Math.floor(Math.random() * availableArenas.length)];
             
             console.log(`🤖 Oponente joga ${card.name} na arena ${arenaId}`);
             
@@ -2213,6 +2454,32 @@ function opponentPlay() {
                         card.ability.used = true;
                     }
                 }
+                if (card.ability.effect === 'zero_strongest') {
+                    const arr = gameState.arenas[arenaId].player;
+                    if (arr && arr.length > 0) {
+                        let bestIdx = 0;
+                        let bestVal = -Infinity;
+                        const hasHackOpponent = (gameState.arenas[arenaId].opponent || []).some(c => c && c.ability && c.ability.id === 'hack');
+                        for (let i = 0; i < arr.length; i++) {
+                            const pc = arr[i];
+                            const base = calculateCardPower(pc);
+                            const arenaBonus = (typeof applyArenaEffect === 'function' && gameState.arenas[arenaId].arena)
+                                ? applyArenaEffect(pc, gameState.arenas[arenaId].arena, 'player')
+                                : 0;
+                            let val = base + arenaBonus;
+                            if (hasHackOpponent) val = Math.floor(val * 0.9);
+                            if (val > bestVal) { bestVal = val; bestIdx = i; }
+                        }
+                        const target = arr[bestIdx];
+                        target.strength = 0;
+                        target.intelligence = 0;
+                        target.speed = 0;
+                        target.durability = 0;
+                        gameState.arenas[arenaId].playerPower = calculateArenaPower(arenaId, 'player');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
                 if (card.ability.effect === 'destroy_arena') {
                     const arr = gameState.arenas[arenaId].player;
                     if (arr && arr.length > 0) {
@@ -2267,6 +2534,64 @@ function opponentPlay() {
                         updateArenasDisplay();
                     }
                 }
+                if (card.ability.effect === 'devour_arena') {
+                    let target = null;
+                    let worst = Infinity;
+                    for (let i = 1; i <= 3; i++) {
+                        const o = gameState.arenas[i].opponentPower ?? calculateArenaPower(i, 'opponent');
+                        const p = gameState.arenas[i].playerPower ?? calculateArenaPower(i, 'player');
+                        const diff = o - p;
+                        if (diff < 0 && diff < worst) {
+                            worst = diff;
+                            target = i;
+                        }
+                    }
+                    if (target) {
+                        gameState.arenas[target].player.splice(0, gameState.arenas[target].player.length);
+                        gameState.arenas[target].opponent.splice(0, gameState.arenas[target].opponent.length);
+                        gameState.arenas[target].playerPower = 0;
+                        gameState.arenas[target].opponentPower = 0;
+                        gameState.arenas[target].disabled = true;
+                        gameState.arenas[target].arena = {
+                            name: 'Mundo Devorado',
+                            effect: 'Removida pela fome de Galactus',
+                            effectType: 'none',
+                            image: ''
+                        };
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'summon_female') {
+                    const all = (typeof getAllCharacters === 'function') ? getAllCharacters() : [];
+                    const females = all.filter(c => c && c.gender === 'female');
+                    if (females.length > 0) {
+                        const idx = Math.floor(Math.random() * females.length);
+                        const base = females[idx];
+                        const summon = { ...base };
+                        summon.id = `${base.id}_summon_${arenaId}_${Math.random().toString(36).slice(2)}`;
+                        if (summon.ability) summon.ability = { ...summon.ability, used: true };
+                        gameState.arenas[arenaId].opponent.push(summon);
+                        gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
+                if (card.ability.effect === 'summon_marvel_ally') {
+                    const all = (typeof getAllCharacters === 'function') ? getAllCharacters() : [];
+                    const marvels = all.filter(c => c && c.universe === 'marvel');
+                    if (marvels.length > 0) {
+                        const idx = Math.floor(Math.random() * marvels.length);
+                        const base = marvels[idx];
+                        const summon = { ...base };
+                        summon.id = `${base.id}_portal_${arenaId}_${Math.random().toString(36).slice(2)}`;
+                        if (summon.ability) summon.ability = { ...summon.ability, used: true };
+                        gameState.arenas[arenaId].opponent.push(summon);
+                        gameState.arenas[arenaId].opponentPower = calculateArenaPower(arenaId, 'opponent');
+                        updateArenasDisplay();
+                        card.ability.used = true;
+                    }
+                }
             }
             
             // Comprar nova carta se disponível
@@ -2274,6 +2599,9 @@ function opponentPlay() {
                 gameState.opponentHand.push(gameState.opponentDeck.shift());
             }
             
+            await tryAutoTeleportNightcrawlerOpponent();
+            
+            await tryRegenerationWolverineOpponent();
             // Finalizar turno do oponente
             endOpponentTurn();
             
@@ -2571,6 +2899,7 @@ async function endTurn() {
             updateGameDisplay();
         } else {
             await tryAutoTeleportNightcrawler();
+            await tryRegenerationWolverine();
             gameState.currentPlayer = 'opponent';
             updateGameDisplay();
             opponentPlay();
@@ -2595,7 +2924,7 @@ async function tryAutoTeleportNightcrawler() {
         const p = gameState.arenas[i].playerPower ?? calculateArenaPower(i, 'player');
         const o = gameState.arenas[i].opponentPower ?? calculateArenaPower(i, 'opponent');
         const diff = p - o;
-        if (diff < worst) {
+        if (diff < 0 && diff < worst) {
             worst = diff;
             target = i;
         }
@@ -2621,6 +2950,93 @@ async function tryAutoTeleportNightcrawler() {
             }
         } catch (_) {}
     }
+    return true;
+}
+async function tryRegenerationWolverine() {
+    const finder = (() => {
+        for (let i = 1; i <= 3; i++) {
+            const idx = gameState.arenas[i].player.findIndex(c => c && ((c.ability && c.ability.id === 'regeneration') || (c.name && c.name.toLowerCase() === 'wolverine')));
+            if (idx !== -1) return { arenaId: i, index: idx, card: gameState.arenas[i].player[idx] };
+        }
+        return null;
+    })();
+    if (!finder) return false;
+    const card = finder.card;
+    if (card.ability && card.ability.used) return false;
+    const stat = (card.ability && card.ability.stat) || 'durability';
+    const inc = (card.ability && card.ability.value) || 10;
+    const before = card[stat] || 0;
+    const after = Math.min(100, before + inc);
+    card[stat] = after;
+    if (card.ability) card.ability.used = true;
+    gameState.arenas[finder.arenaId].playerPower = calculateArenaPower(finder.arenaId, 'player');
+    updateArenasDisplay();
+    if (isMultiplayerMode()) {
+        const code = getURLParam('code');
+        try {
+            if (code && window.Multiplayer && Multiplayer.sendAction) {
+                const actionId = Math.random().toString(36).slice(2) + Date.now();
+                const payload = { id: actionId, type: 'self_buff', arenaId: finder.arenaId, cardId: card.id, stat, value: inc, clientId: gameState.clientId };
+                const sanitized = sanitizeForFirestore(payload);
+                await Multiplayer.sendAction(code, sanitized);
+                if (Multiplayer.updateGameState) {
+                    await Multiplayer.updateGameState(code, { lastAction: sanitized });
+                }
+            }
+        } catch (_) {}
+    }
+    return true;
+}
+async function tryAutoTeleportNightcrawlerOpponent() {
+    const finder = (() => {
+        for (let i = 1; i <= 3; i++) {
+            const idx = gameState.arenas[i].opponent.findIndex(c => c && ((c.ability && c.ability.id === 'teleport') || (c.name && c.name.toLowerCase() === 'noturno')));
+            if (idx !== -1) return { arenaId: i, index: idx, card: gameState.arenas[i].opponent[idx] };
+        }
+        return null;
+    })();
+    if (!finder) return false;
+    const card = finder.card;
+    if (card.ability && card.ability.used) return false;
+    let target = null;
+    let worst = Infinity;
+    for (let i = 1; i <= 3; i++) {
+        const o = gameState.arenas[i].opponentPower ?? calculateArenaPower(i, 'opponent');
+        const p = gameState.arenas[i].playerPower ?? calculateArenaPower(i, 'player');
+        const diff = o - p;
+        if (diff < 0 && diff < worst) {
+            worst = diff;
+            target = i;
+        }
+    }
+    if (!target || target === finder.arenaId) return false;
+    gameState.arenas[finder.arenaId].opponent.splice(finder.index, 1);
+    gameState.arenas[target].opponent.push(card);
+    gameState.arenas[finder.arenaId].opponentPower = calculateArenaPower(finder.arenaId, 'opponent');
+    gameState.arenas[target].opponentPower = calculateArenaPower(target, 'opponent');
+    if (card.ability) card.ability.used = true;
+    updateArenasDisplay();
+    return true;
+}
+async function tryRegenerationWolverineOpponent() {
+    const finder = (() => {
+        for (let i = 1; i <= 3; i++) {
+            const idx = gameState.arenas[i].opponent.findIndex(c => c && ((c.ability && c.ability.id === 'regeneration') || (c.name && c.name.toLowerCase() === 'wolverine')));
+            if (idx !== -1) return { arenaId: i, index: idx, card: gameState.arenas[i].opponent[idx] };
+        }
+        return null;
+    })();
+    if (!finder) return false;
+    const card = finder.card;
+    if (card.ability && card.ability.used) return false;
+    const stat = (card.ability && card.ability.stat) || 'durability';
+    const inc = (card.ability && card.ability.value) || 10;
+    const before = card[stat] || 0;
+    const after = Math.min(100, before + inc);
+    card[stat] = after;
+    if (card.ability) card.ability.used = true;
+    gameState.arenas[finder.arenaId].opponentPower = calculateArenaPower(finder.arenaId, 'opponent');
+    updateArenasDisplay();
     return true;
 }
 
@@ -2678,6 +3094,7 @@ function calculateGameResult() {
     
     for (let i = 1; i <= 3; i++) {
         const arena = gameState.arenas[i];
+        if (arena.disabled) continue;
         console.log(`Arena ${i}: Jogador ${arena.playerPower} vs Oponente ${arena.opponentPower}`);
         
         if (arena.playerPower > arena.opponentPower) {
