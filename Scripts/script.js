@@ -3089,6 +3089,14 @@ function endGame() {
  * Calcula resultado do jogo
  */
 function calculateGameResult() {
+    // Recalcular poderes das arenas antes de comparar para garantir efeitos finais
+    for (let i = 1; i <= 3; i++) {
+        const arena = gameState.arenas[i];
+        if (!arena) continue;
+        arena.playerPower = calculateArenaPower(i, 'player');
+        arena.opponentPower = calculateArenaPower(i, 'opponent');
+    }
+
     let playerWins = 0;
     let opponentWins = 0;
     

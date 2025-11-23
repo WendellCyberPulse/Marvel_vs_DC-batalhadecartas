@@ -832,4 +832,3 @@ function shuffleArray(array) {
 }
 
 console.log('✅ Characters.js totalmente carregado');
-
