@@ -11,6 +11,8 @@ const DIFFICULTY_SETTINGS = {
     5: { name: "Lendário", opponentBuff: 40, turnTime: 30, description: "O desafio máximo" }
 };
 
+const ABILITY_RESOLUTION_DELAY_MS = 1200;
+
 // Estado do jogo
 const gameState = {
     // Controle de jogo
@@ -691,7 +693,7 @@ function updateMultiplayerStatusUI(roomData) {
                 gameState.resultShown = true;
                 updateGameDisplay();
             } catch (e) {}
-        }, 300);
+        }, ABILITY_RESOLUTION_DELAY_MS);
     }
 }
 
@@ -1961,7 +1963,7 @@ function handleRemoteAction(entry) {
             showGameResult(result, difficultyChanged, oldDifficulty);
             gameState.resultShown = true;
             updateGameDisplay();
-        }, 300);
+        }, ABILITY_RESOLUTION_DELAY_MS);
     }
 }
 
@@ -3053,36 +3055,23 @@ function endGame() {
     gameState.gameEnded = true;
     gameState.currentPlayer = 'none';
     
-    // Calcular resultado
-    const result = calculateGameResult();
-    const { playerWins, opponentWins } = result;
     
-    // 📡 Multiplayer: enviar ação de fim de jogo para o outro cliente
-    if (isMultiplayerMode()) {
-        const code = getURLParam('code');
-        if (code && window.Multiplayer && Multiplayer.sendAction) {
-            Multiplayer.sendAction(code, { type: 'end_game', result }).catch(err => {
-                console.warn('Falha ao enviar ação end_game:', err);
-            });
-        }
-    }
     
-    // 🔥 Atualizar estatísticas E obter info sobre mudança de dificuldade
-    const { difficultyChanged, oldDifficulty } = updateGameStats(result);
-    
-    // Mostrar resultado
-    showGameResult(result, difficultyChanged, oldDifficulty);
-    gameState.resultShown = true;
-    
-    // Atualizar interface
-    updateGameDisplay();
-    
-    console.log('📊 Jogo finalizado - Resultado:', { 
-        playerWins, 
-        opponentWins, 
-        difficulty: gameState.difficulty,
-        winStreak: gameState.winStreak 
-    });
+    // Aguardar efeitos/animacoes antes de exibir o resultado
+    setTimeout(() => {
+        if (gameState.resultShown) return;
+        const finalResult = calculateGameResult();
+        const { difficultyChanged, oldDifficulty } = updateGameStats(finalResult);
+        showGameResult(finalResult, difficultyChanged, oldDifficulty);
+        gameState.resultShown = true;
+        updateGameDisplay();
+        console.log('📊 Jogo finalizado - Resultado:', {
+            playerWins: finalResult.playerWins,
+            opponentWins: finalResult.opponentWins,
+            difficulty: gameState.difficulty,
+            winStreak: gameState.winStreak
+        });
+    }, ABILITY_RESOLUTION_DELAY_MS);
 }
 
 /**
